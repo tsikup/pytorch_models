@@ -1,8 +1,4 @@
-import os
-import timm
 import torch
-from torch import nn
-from typing import List
 from dotmap import DotMap
 from torchvision import models
 from torchvision.models.feature_extraction import (

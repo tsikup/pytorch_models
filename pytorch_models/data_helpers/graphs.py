@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from PIL import Image
-from typing import Union, List, Callable, Optional, Any, Tuple
+from typing import Union, List, Callable, Optional, Any
 from torchvision import transforms
 from histocartography.utils.image import WIN_SIZE as HOVERNET_WIN_SIZE
 from histocartography.preprocessing import (

@@ -6,7 +6,6 @@ import torch
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
-from copy import deepcopy
 from topk.svm import SmoothTop1SVM
 from ..base import BaseMILModel
 from ..ssl_features.vit import ViT

@@ -1,8 +1,5 @@
-import copy
-from typing import Union, Dict, List
-import numpy as np
+from typing import Union, Dict
 from wholeslidedata import WholeSlideAnnotation
-from wholeslidedata.samplers.annotationsampler import AnnotationSampler
 from wholeslidedata.samplers.batchreferencesampler import BatchReferenceSampler
 from wholeslidedata.samplers.labelsampler import LabelSampler
 from wholeslidedata.samplers.patchlabelsampler import PatchLabelSampler

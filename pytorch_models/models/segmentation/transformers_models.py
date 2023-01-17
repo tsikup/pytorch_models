@@ -1,18 +1,13 @@
-from bottleneck_transformer_pytorch import BottleStack
-from torch import nn
-from torchvision.models import resnet50
-from vit_pytorch import ViT
 import os
-import sys
 import numpy as np
 from dotmap import DotMap
-
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(os.path.dirname(SCRIPT_DIR))
-
+from torch import nn
+from torchvision.models import resnet50
+from bottleneck_transformer_pytorch import BottleStack
 from ..base import BaseModel
-from submodules.TransUNet.networks.vit_seg_modeling import VisionTransformer as ViT_seg
-from submodules.TransUNet.networks.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
+
+# from submodules.TransUNet.networks.vit_seg_modeling import VisionTransformer as ViT_seg
+# from submodules.TransUNet.networks.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 
 # TODO: https://github.com/The-AI-Summer/self-attention-cv
 # TODO: https://theaisummer.com/transformers-computer-vision/

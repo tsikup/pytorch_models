@@ -2,7 +2,6 @@ from pathlib import Path
 import numpy as np
 from typing import List, Union, Dict
 from PIL import Image, ImageDraw
-from matplotlib import colors
 from wholeslidedata.annotation.parser import AnnotationParser
 from wholeslidedata.annotation.structures import Annotation
 from wholeslidedata.samplers.annotationsampler import OrderedAnnotationSampler

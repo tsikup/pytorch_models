@@ -1,4 +1,3 @@
-import numpy as np
 import dgl
 import networkx as nx
 

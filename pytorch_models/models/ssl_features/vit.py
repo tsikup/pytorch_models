@@ -18,12 +18,9 @@ https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision
 import os
 import math
 import warnings
-from functools import partial
-
 import torch
 import torch.nn as nn
-
-from ..base import BaseModel
+from functools import partial
 
 
 def _no_grad_trunc_normal_(tensor, mean, std, a, b):

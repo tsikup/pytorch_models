@@ -1,5 +1,3 @@
-import os
-import sys
 import numpy as np
 import albumentations as A
 from typing import Union, List, Dict
@@ -7,10 +5,6 @@ from stainlib import LuminosityStandardizer
 from stainlib.augmentation.augmenter import StainAugmentor as StainlibStainAugmentor
 from stainlib.augmentation.augmenter import HedColorAugmenter
 from albumentations.core.transforms_interface import ImageOnlyTransform
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.dirname(SCRIPT_DIR))
-
 from pytorch_models.utils.utils import to_tuple
 from he_preprocessing.utils.image import replace_pixels
 
