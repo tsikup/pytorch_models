@@ -2,6 +2,7 @@ from pathlib import Path
 import numpy as np
 from typing import List, Union, Dict
 from PIL import Image, ImageDraw
+from natsort import os_sorted
 from wholeslidedata.annotation.parser import AnnotationParser
 from wholeslidedata.annotation.structures import Annotation
 from wholeslidedata.samplers.annotationsampler import OrderedAnnotationSampler
@@ -168,7 +169,7 @@ def whole_slide_files_from_folder_factory(
     all_sources = []
     folder = Path(folder)
     for extension in class_type.EXTENSIONS.names():
-        paths = (
+        paths = os_sorted(
             folder.rglob("*" + extension) if recursive else folder.glob("*" + extension)
         )
         sources = factory_sources_from_paths(
