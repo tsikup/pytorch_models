@@ -1,0 +1,1 @@
+# https://openaccess.thecvf.com/content_CVPR_2019/papers/Tokunaga_Adaptive_Weighting_Multi-Field-Of-View_CNN_for_Semantic_Segmentation_in_Pathology_CVPR_2019_paper.pdf
