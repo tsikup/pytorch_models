@@ -19,7 +19,7 @@ class MultiResWholeSlideImage(WholeSlideImage):
         backend: Union[WholeSlideImageBackend, str] = "openslide",
         annotation_path=None,
         labels=None,
-        cell_graph_extractor="resnet34",
+        cell_graph_extractor=None,
         cell_graph_image_normalizer="vahadane",
     ):
         super(MultiResWholeSlideImage, self).__init__(path=path, backend=backend)
