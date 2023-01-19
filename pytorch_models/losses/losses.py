@@ -1,7 +1,7 @@
 from torch import nn
 from pytorch_toolbelt import losses as L
 
-from .utils import JointLoss
+from pytorch_models.losses.utils import JointLoss
 
 
 # TODO: Implement other losses

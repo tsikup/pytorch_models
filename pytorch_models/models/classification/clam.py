@@ -7,9 +7,9 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from topk.svm import SmoothTop1SVM
-from ..base import BaseMILModel
-from ..ssl_features.vit import ViT
-from ..ssl_features.resnets import ResNet50_SimCLR
+from pytorch_models.models.base import BaseMILModel
+from pytorch_models.models.ssl_features.vit import ViT
+from pytorch_models.models.ssl_features.resnets import ResNet50_SimCLR
 
 
 def initialize_weights(module):

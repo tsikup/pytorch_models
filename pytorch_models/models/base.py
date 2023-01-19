@@ -20,9 +20,9 @@ from torch.optim import (
     Adadelta,
 )
 from ranger21 import Ranger21
-from ..losses.losses import get_loss
-from ..optim.utils import get_warmup_factor
-from ..utils.metrics.metrics import get_metrics
+from pytorch_models.losses.losses import get_loss
+from pytorch_models.optim.utils import get_warmup_factor
+from pytorch_models.utils.metrics.metrics import get_metrics
 
 
 # TODO: inference sliding window
