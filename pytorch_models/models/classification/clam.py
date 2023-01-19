@@ -168,12 +168,21 @@ class CLAM_SB(nn.Module):
         ), "Mismatch between attention module output feature size and classifiers' input feature size"
 
         if (
+            self.multires_aggregation["attention"] in ["late"]
+            and self.multires_aggregation["features"] == "concat"
+        ):
+            last_layer = self.classifier_size[-1]
+            self.classifier_size = [2 * l for l in self.classifier_size]
+            self.classifier_size.append(last_layer)
+
+        if (
             autoscale_network
             and self.multires_aggregation is not None
             and self.multires_aggregation["features"] == "concat"
         ):
-            size[0] = 2 * size[0]
-            size[1] = 2 * size[1]
+            raise NotImplementedError
+            # size[0] = 2 * size[0]
+            # size[1] = 2 * size[1]
 
         self.target_net, self.attention_net = self._create_attention_model(
             size, dropout, gate, n_classes=1
@@ -182,8 +191,16 @@ class CLAM_SB(nn.Module):
         if self.multires_aggregation is not None and self.multires_aggregation[
             "features"
         ] in ["linear", "nonlinear"]:
-            self.linear_features_target = nn.Linear(size[0], size[0], bias=False)
-            self.linear_features_context = nn.Linear(size[0], size[0], bias=False)
+            if self.multires_aggregation["attention"] != "late":
+                self.linear_features_target = nn.Linear(size[0], size[0], bias=False)
+                self.linear_features_context = nn.Linear(size[0], size[0], bias=False)
+            else:
+                self.linear_features_target = nn.Linear(
+                    self.classifier_size[0], self.classifier_size[0], bias=False
+                )
+                self.linear_features_context = nn.Linear(
+                    self.classifier_size[0], self.classifier_size[0], bias=False
+                )
 
         if (
             self.multires_aggregation is not None
@@ -198,7 +215,7 @@ class CLAM_SB(nn.Module):
             ], "Multiresolution integration at the attention level is enabled.. The aggregation function must not be linear for the attention vectors."
             assert (
                 self.multires_aggregation["attention"] != "concat"
-            ), "Multiresolution integration at the attention level is enabled.. The aggregation function must not be concat for the attention vectors."
+            ), "Multiresolution integration at the attention level is enabled.. The aggregation function must not be concat for the attention vectors, because each tile feature vector (either integrated or not) should have a single attention score."
         elif (
             self.multires_aggregation is not None
             and self.multires_aggregation["feature_level"] > 0
@@ -323,6 +340,10 @@ class CLAM_SB(nn.Module):
 
     def _aggregate_multires_features(self, h, h_context, method, is_attention=False):
         if method == "concat":
+            if is_attention:
+                raise Exception(
+                    "Attention vectors cannot be integrated with concat method."
+                )
             h = torch.cat([h, h_context], dim=1)
         elif method == "average" or method == "mean":
             h = torch.dstack((h, h_context))
