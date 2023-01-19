@@ -372,10 +372,7 @@ class CLAM_SB(nn.Module):
             assert (
                 h_context is not None
             ), "Multiresolution is enabled.. h_context features should not be None."
-            if (
-                self.multires_aggregation["attention"] is None
-                or self.multires_aggregation["attention"] == "late"
-            ):
+            if self.multires_aggregation["attention"] is None:
                 if self.multires_aggregation["feature_level"] <= 0:
                     h = self._aggregate_multires_features(
                         h,
