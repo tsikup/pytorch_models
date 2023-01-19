@@ -1,5 +1,7 @@
+import torchmetrics
 from torch import nn
-from pytorch_toolbelt import losses as L
+
+# from pytorch_toolbelt import losses as L
 
 from pytorch_models.losses.utils import JointLoss
 
@@ -8,7 +10,9 @@ from pytorch_models.losses.utils import JointLoss
 # https://github.com/BloodAxe/pytorch-toolbelt/tree/develop/pytorch_toolbelt/losses
 # https://github.com/JunMa11/SegLoss
 # https://github.com/JunMa11/SegWithDistMap
-def get_loss(config_losses, classes_loss_weights=None, multi_loss_weights=None):
+def get_loss(
+    config_losses, classes_loss_weights=None, multi_loss_weights=None, n_classes=1
+):
     """
     Function to get training loss
 
@@ -37,34 +41,47 @@ def get_loss(config_losses, classes_loss_weights=None, multi_loss_weights=None):
         elif loss in ["bce", "binary_crossentropy"]:
             losses.append(nn.BCEWithLogitsLoss())
         elif loss == "soft_ce":
-            losses.append(L.SoftCrossEntropyLoss(ignore_index=-100, smooth_factor=0.0))
+            raise NotImplementedError
+            # losses.append(L.SoftCrossEntropyLoss(ignore_index=-100, smooth_factor=0.0))
         elif loss == "soft_bce":
-            losses.append(
-                L.SoftBCEWithLogitsLoss(ignore_index=-100, smooth_factor=None)
-            )
+            raise NotImplementedError
+            # losses.append(
+            #     L.SoftBCEWithLogitsLoss(ignore_index=-100, smooth_factor=None)
+            # )
         elif loss == "balanced_bce":
-            losses.append(L.BalancedBCEWithLogitsLoss())
+            raise NotImplementedError
+            # losses.append(L.BalancedBCEWithLogitsLoss())
         elif loss == "binary_dice":
             # TODO: classes that contribute to loss computation and smooth
-            losses.append(L.DiceLoss(mode="binary", smooth=0.0))
+            losses.append(torchmetrics.Dice(num_classes=0))
+            # losses.append(L.DiceLoss(mode="binary", smooth=0.0))
         elif loss == "multiclass_dice":
-            losses.append(L.DiceLoss(mode="multiclass", smooth=0.0))
+            losses.append(torchmetrics.Dice(num_classes=n_classes))
+            # losses.append(L.DiceLoss(mode="multiclass", smooth=0.0))
         elif loss == "binary_focal":
-            losses.append(L.BinaryFocalLoss(alpha=0.0, gamma=2.0, normalized=False))
+            raise NotImplementedError
+            # losses.append(L.BinaryFocalLoss(alpha=0.0, gamma=2.0, normalized=False))
         elif loss == "focal":
-            losses.append(L.FocalLoss(alpha=0.0, gamma=2.0, normalized=False))
+            raise NotImplementedError
+            # losses.append(L.FocalLoss(alpha=0.0, gamma=2.0, normalized=False))
         elif loss == "focal_cosine":
-            losses.append(L.FocalCosineLoss())
+            raise NotImplementedError
+            # losses.append(L.FocalCosineLoss())
         elif loss == "binary_jaccard":
-            losses.append(L.JaccardLoss(mode="binary", smooth=0.0))
+            raise NotImplementedError
+            # losses.append(L.JaccardLoss(mode="binary", smooth=0.0))
         elif loss == "multiclass_jaccard":
-            losses.append(L.JaccardLoss(mode="multiclass", smooth=0.0))
+            raise NotImplementedError
+            # losses.append(L.JaccardLoss(mode="multiclass", smooth=0.0))
         elif loss == "binary_lovasz":
-            losses.append(L.BinaryLovaszLoss())
+            raise NotImplementedError
+            # losses.append(L.BinaryLovaszLoss())
         elif loss == "lovasz":
-            losses.append(L.LovaszLoss())
+            raise NotImplementedError
+            # losses.append(L.LovaszLoss())
         elif loss == "wing":
-            losses.append(L.WingLoss())
+            raise NotImplementedError
+            # losses.append(L.WingLoss())
         else:
             raise RuntimeError("No loss with that name.")
 
