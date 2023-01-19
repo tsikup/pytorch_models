@@ -372,7 +372,10 @@ class CLAM_SB(nn.Module):
             assert (
                 h_context is not None
             ), "Multiresolution is enabled.. h_context features should not be None."
-            if self.multires_aggregation["attention"] is None:
+            if (
+                self.multires_aggregation["attention"] is None
+                or self.multires_aggregation["attention"] == "late"
+            ):
                 if self.multires_aggregation["feature_level"] <= 0:
                     h = self._aggregate_multires_features(
                         h,
@@ -402,72 +405,104 @@ class CLAM_SB(nn.Module):
                     h_context, self.context_net, self.attention_context_net
                 )
                 A_context = torch.transpose(A_context, 1, 0)  # KxN
-                A = self._aggregate_multires_features(
-                    A,
-                    A_context,
-                    method=self.multires_aggregation["attention"],
-                    is_attention=True,
-                )
-                h = self._aggregate_multires_features(
-                    h,
-                    h_context,
-                    method=self.multires_aggregation["features"],
-                    is_attention=False,
-                )
+
+                if self.multires_aggregation["attention"] != "late":
+                    A = self._aggregate_multires_features(
+                        A,
+                        A_context,
+                        method=self.multires_aggregation["attention"],
+                        is_attention=True,
+                    )
+                    h = self._aggregate_multires_features(
+                        h,
+                        h_context,
+                        method=self.multires_aggregation["features"],
+                        is_attention=False,
+                    )
         else:
             A, h = self.apply_attention_net(h, self.target_net, self.attention_net)
             A = torch.transpose(A, 1, 0)  # KxN
 
-        if attention_only:
-            return A
-        A_raw = A
-        A = F.softmax(A, dim=1)  # softmax over N
+        if self.multires_aggregation["attention"] == "late":
+            if attention_only:
+                return A, A_context
+            A_raw = A
+            A_context_raw = A_context
+            A = F.softmax(A, dim=1)  # softmax over N
+            A_context = F.softmax(A_context, dim=1)  # softmax over N
 
-        if instance_eval:
-            total_inst_loss = 0.0
-            all_preds = []
-            all_targets = []
-            inst_labels = F.one_hot(
-                label.to(torch.int64), num_classes=self.n_classes
-            ).squeeze()  # binarize label
-            for i in range(len(self.instance_classifiers)):
-                inst_label = inst_labels[i].item()
-                classifier = self.instance_classifiers[i]
-                if inst_label == 1:  # in-the-class:
-                    instance_loss, preds, targets = self.inst_eval(A, h, classifier)
-                    all_preds.extend(preds.cpu().numpy())
-                    all_targets.extend(targets.cpu().numpy())
-                else:  # out-of-the-class
-                    if self.subtyping:
-                        instance_loss, preds, targets = self.inst_eval_out(
-                            A, h, classifier
-                        )
+            M = torch.mm(A, h)
+            M_context = torch.mm(A_context, h_context)
+            M = self._aggregate_multires_features(
+                M,
+                M_context,
+                method=self.multires_aggregation["features"],
+                is_attention=False,
+            )
+
+            logits = self.classifiers(M)
+            Y_hat = torch.topk(logits, 1, dim=1)[1]
+            Y_prob = F.softmax(logits, dim=1)
+            if instance_eval:
+                pass
+            else:
+                results_dict = {}
+            if return_features:
+                results_dict.update({"features": M})
+            else:
+                results_dict.update({"features": None})
+            return logits, Y_prob, Y_hat, A_raw, results_dict
+        else:
+            if attention_only:
+                return A
+            A_raw = A
+            A = F.softmax(A, dim=1)  # softmax over N
+
+            if instance_eval:
+                total_inst_loss = 0.0
+                all_preds = []
+                all_targets = []
+                inst_labels = F.one_hot(
+                    label.to(torch.int64), num_classes=self.n_classes
+                ).squeeze()  # binarize label
+                for i in range(len(self.instance_classifiers)):
+                    inst_label = inst_labels[i].item()
+                    classifier = self.instance_classifiers[i]
+                    if inst_label == 1:  # in-the-class:
+                        instance_loss, preds, targets = self.inst_eval(A, h, classifier)
                         all_preds.extend(preds.cpu().numpy())
                         all_targets.extend(targets.cpu().numpy())
-                    else:
-                        continue
-                total_inst_loss += instance_loss
+                    else:  # out-of-the-class
+                        if self.subtyping:
+                            instance_loss, preds, targets = self.inst_eval_out(
+                                A, h, classifier
+                            )
+                            all_preds.extend(preds.cpu().numpy())
+                            all_targets.extend(targets.cpu().numpy())
+                        else:
+                            continue
+                    total_inst_loss += instance_loss
 
-            if self.subtyping:
-                total_inst_loss /= len(self.instance_classifiers)
+                if self.subtyping:
+                    total_inst_loss /= len(self.instance_classifiers)
 
-        M = torch.mm(A, h)
-        logits = self.classifiers(M)
-        Y_hat = torch.topk(logits, 1, dim=1)[1]
-        Y_prob = F.softmax(logits, dim=1)
-        if instance_eval:
-            results_dict = {
-                "instance_loss": total_inst_loss,
-                "inst_labels": np.array(all_targets),
-                "inst_preds": np.array(all_preds),
-            }
-        else:
-            results_dict = {}
-        if return_features:
-            results_dict.update({"features": M})
-        else:
-            results_dict.update({"features": None})
-        return logits, Y_prob, Y_hat, A_raw, results_dict
+            M = torch.mm(A, h)
+            logits = self.classifiers(M)
+            Y_hat = torch.topk(logits, 1, dim=1)[1]
+            Y_prob = F.softmax(logits, dim=1)
+            if instance_eval:
+                results_dict = {
+                    "instance_loss": total_inst_loss,
+                    "inst_labels": np.array(all_targets),
+                    "inst_preds": np.array(all_preds),
+                }
+            else:
+                results_dict = {}
+            if return_features:
+                results_dict.update({"features": M})
+            else:
+                results_dict.update({"features": None})
+            return logits, Y_prob, Y_hat, A_raw, results_dict
 
 
 # class CLAM_MB(CLAM_SB):
