@@ -1,8 +1,9 @@
-from pathlib import Path
 import numpy as np
-from typing import List, Union, Dict
-from PIL import Image, ImageDraw
+from pathlib import Path
 from natsort import os_sorted
+from PIL import Image, ImageDraw
+from typing import List, Union, Dict
+
 from wholeslidedata.annotation.parser import AnnotationParser
 from wholeslidedata.annotation.structures import Annotation
 from wholeslidedata.samplers.annotationsampler import OrderedAnnotationSampler

@@ -25,20 +25,33 @@ def get_metrics(
 def get_classification_metrics(
     config, n_classes, mode="train", dist_sync_on_step=False
 ):
-    if n_classes > 2:
-        mdmc_reduce = config.metrics.mdmc_reduce
-    else:
-        mdmc_reduce = None
-
     if n_classes in [1, 2]:
+        if config.metrics.threshold is None:
+            config.metrics.threshold = 0.5
+
         metrics = MetricCollection(
             [
-                Accuracy(num_classes=1, mdmc_reduce=mdmc_reduce),
-                Recall(num_classes=1, mdmc_reduce=mdmc_reduce),
-                Specificity(num_classes=1, mdmc_reduce=mdmc_reduce),
-                Precision(num_classes=1, mdmc_reduce=mdmc_reduce),
-                F1Score(num_classes=1, mdmc_reduce=mdmc_reduce),
-                AUROC(num_classes=None, mdmc_reduce=mdmc_reduce),
+                Accuracy(
+                    threshold=config.metrics.threshold,
+                    num_classes=1,
+                ),
+                Recall(
+                    threshold=config.metrics.threshold,
+                    num_classes=1,
+                ),
+                Specificity(
+                    threshold=config.metrics.threshold,
+                    num_classes=1,
+                ),
+                Precision(
+                    threshold=config.metrics.threshold,
+                    num_classes=1,
+                ),
+                F1Score(
+                    threshold=config.metrics.threshold,
+                    num_classes=1,
+                ),
+                AUROC(num_classes=None),
             ]
         )
     else:
@@ -48,31 +61,26 @@ def get_classification_metrics(
                     Accuracy(
                         average="micro",
                         num_classes=n_classes,
-                        mdmc_reduce=mdmc_reduce,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     Recall(
                         average="micro",
                         num_classes=n_classes,
-                        mdmc_reduce=mdmc_reduce,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     Specificity(
                         average="micro",
                         num_classes=n_classes,
-                        mdmc_reduce=mdmc_reduce,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     Precision(
                         average="micro",
                         num_classes=n_classes,
-                        mdmc_reduce=mdmc_reduce,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     F1Score(
                         average="micro",
                         num_classes=n_classes,
-                        mdmc_reduce=mdmc_reduce,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                 ],
@@ -83,31 +91,26 @@ def get_classification_metrics(
                     Accuracy(
                         average="macro",
                         num_classes=n_classes,
-                        mdmc_reduce=mdmc_reduce,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     Recall(
                         average="macro",
                         num_classes=n_classes,
-                        mdmc_reduce=mdmc_reduce,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     Specificity(
                         average="macro",
                         num_classes=n_classes,
-                        mdmc_reduce=mdmc_reduce,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     Precision(
                         average="macro",
                         num_classes=n_classes,
-                        mdmc_reduce=mdmc_reduce,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     F1Score(
                         average="macro",
                         num_classes=n_classes,
-                        mdmc_reduce=mdmc_reduce,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                 ],
@@ -122,31 +125,26 @@ def get_classification_metrics(
                         Accuracy(
                             average="none",
                             num_classes=1 if n_classes in [1, 2] else n_classes,
-                            mdmc_reduce=mdmc_reduce,
                             dist_sync_on_step=dist_sync_on_step,
                         ),
                         Recall(
                             average="none",
                             num_classes=1 if n_classes in [1, 2] else n_classes,
-                            mdmc_reduce=mdmc_reduce,
                             dist_sync_on_step=dist_sync_on_step,
                         ),
                         Specificity(
                             average="none",
                             num_classes=1 if n_classes in [1, 2] else n_classes,
-                            mdmc_reduce=mdmc_reduce,
                             dist_sync_on_step=dist_sync_on_step,
                         ),
                         Precision(
                             average="none",
                             num_classes=1 if n_classes in [1, 2] else n_classes,
-                            mdmc_reduce=mdmc_reduce,
                             dist_sync_on_step=dist_sync_on_step,
                         ),
                         F1Score(
                             average="none",
                             num_classes=1 if n_classes in [1, 2] else n_classes,
-                            mdmc_reduce=mdmc_reduce,
                             dist_sync_on_step=dist_sync_on_step,
                         ),
                     ]
@@ -158,17 +156,12 @@ def get_classification_metrics(
 
 
 def get_segmentation_metrics(config, n_classes, mode="train", dist_sync_on_step=False):
-    if n_classes > 1:
-        mdmc_reduce = config.metrics.mdmc_reduce
-    else:
-        mdmc_reduce = None
-
     if n_classes in [1, 2]:
         metrics = MetricCollection(
             [
-                Accuracy(num_classes=1, mdmc_reduce=mdmc_reduce),
-                Dice(num_classes=1, mdmc_reduce=mdmc_reduce),
-                JaccardIndex(num_classes=2, mdmc_reduce=mdmc_reduce),
+                Accuracy(num_classes=1),
+                Dice(num_classes=1),
+                JaccardIndex(num_classes=2),
             ]
         )
     else:
@@ -178,19 +171,16 @@ def get_segmentation_metrics(config, n_classes, mode="train", dist_sync_on_step=
                     Accuracy(
                         average="micro",
                         num_classes=n_classes,
-                        mdmc_reduce=mdmc_reduce,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     Dice(
                         average="micro",
                         num_classes=n_classes,
-                        mdmc_reduce=mdmc_reduce,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     JaccardIndex(
                         average="micro",
                         num_classes=n_classes,
-                        mdmc_reduce=mdmc_reduce,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                 ],
@@ -201,19 +191,16 @@ def get_segmentation_metrics(config, n_classes, mode="train", dist_sync_on_step=
                     Accuracy(
                         average="macro",
                         num_classes=n_classes,
-                        mdmc_reduce=mdmc_reduce,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     Dice(
                         average="macro",
                         num_classes=n_classes,
-                        mdmc_reduce=mdmc_reduce,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     JaccardIndex(
                         average="macro",
                         num_classes=n_classes,
-                        mdmc_reduce=mdmc_reduce,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                 ],
@@ -228,19 +215,16 @@ def get_segmentation_metrics(config, n_classes, mode="train", dist_sync_on_step=
                         Accuracy(
                             average="none",
                             num_classes=n_classes,
-                            mdmc_reduce=mdmc_reduce,
                             dist_sync_on_step=dist_sync_on_step,
                         ),
                         Dice(
                             average="none",
                             num_classes=n_classes,
-                            mdmc_reduce=mdmc_reduce,
                             dist_sync_on_step=dist_sync_on_step,
                         ),
                         JaccardIndex(
                             average="none",
                             num_classes=n_classes,
-                            mdmc_reduce=mdmc_reduce,
                             dist_sync_on_step=dist_sync_on_step,
                         ),
                     ]
