@@ -118,7 +118,7 @@ class MaskedTiledAnnotationHook(AnnotationHook):
                                     np.array(intersection.exterior.coords)
                                 )
                             elif intersection.type == "MultiPolygon":
-                                for poly in intersection:
+                                for poly in intersection.geoms:
                                     intersections.append(np.array(poly.exterior.coords))
                             else:
                                 pass
