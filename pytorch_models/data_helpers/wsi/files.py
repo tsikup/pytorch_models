@@ -1,40 +1,31 @@
 from pathlib import Path
 from typing import Union
-from wholeslidedata.extensions import (
-    FolderCoupledExtension,
-    WholeSlideImageExtension,
-)
-from wholeslidedata.mode import Mode
-from wholeslidedata.source.copy import copy as copy_source
-from wholeslidedata.source.files import WholeSlideFile, ImageFile
-
+from sourcelib.file import File
+from wholeslidedata.data.extensions import WHOLE_SLIDE_IMAGE_EXTENSIONS
+from wholeslidedata.data.mode import WholeSlideMode
 from .wholeslideimage import MultiResWholeSlideImage
 
 
-@WholeSlideFile.register(
-    ("mrwsi", "multires_wsi", "multiresolutionwsi", "multiresolutionwholeslideimage")
-)
-class MultiResWholeSlideImageFile(WholeSlideFile, ImageFile):
-    EXTENSIONS = WholeSlideImageExtension
+class MultiResWholeSlideImageFile(File):
+    EXTENSIONS = WHOLE_SLIDE_IMAGE_EXTENSIONS
+    IDENTIFIER = "mrwsi"
 
     def __init__(
-        self, mode: Union[str, Mode], path: Union[str, Path], image_backend: str = None
+        self,
+        mode: Union[str, WholeSlideMode],
+        path: Union[str, Path],
+        image_backend: str = None,
     ):
-        super().__init__(mode, path, image_backend)
+        super().__init__(path=path, mode=mode)
+        self._image_backend = image_backend
 
     def copy(self, destination_folder) -> None:
         destination_folder = Path(destination_folder) / "images"
-        extension_name = self.path.suffix
-        if WholeSlideImageExtension.is_extension(
-            extension_name, FolderCoupledExtension
-        ):
-            folder = self.path.with_suffix("")
-            copy_source(folder, destination_folder)
         super().copy(destination_folder=destination_folder)
 
     def open(
         self,
-        cell_graph_extractor: str = "resnet34",
+        cell_graph_extractor: str = None,
         cell_graph_image_normalizer: str = "vahadane",
     ):
         return MultiResWholeSlideImage(

@@ -4,7 +4,7 @@ from wholeslidedata.samplers.batchreferencesampler import BatchReferenceSampler
 from wholeslidedata.samplers.labelsampler import LabelSampler
 from wholeslidedata.samplers.patchlabelsampler import PatchLabelSampler
 from wholeslidedata.samplers.samplesampler import SampleSampler
-from wholeslidedata.samplers.structures import BatchShape
+from wholeslidedata.samplers.batchshape import BatchShape
 
 from .wholeslideimage import MultiResWholeSlideImage
 from .files import MultiResWholeSlideImageFile

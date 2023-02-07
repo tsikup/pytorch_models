@@ -27,6 +27,9 @@ class MultiResWholeSlideImage(WholeSlideImage):
 
         self.annotation = None
         if annotation_path:
+            assert annotation_path.endswith(
+                ".geojson"
+            ), "Annotation file must be a QuPath geojson file."
             self._annotation_parser = QuPathAnnotationParser()
             self.annotation = WholeSlideAnnotation(
                 annotation_path=annotation_path,
@@ -67,6 +70,7 @@ class MultiResWholeSlideImage(WholeSlideImage):
         )
 
     def get_tissue_mask(self, spacing=32, return_contours=True):
+        # TODO: if annotation exists, use it to get the tissue mask
         downsample = self.get_downsampling_from_spacing(spacing)
         return ut_image.get_slide_tissue_mask(
             slide_path=self.path,

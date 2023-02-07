@@ -1,20 +1,20 @@
 from typing import Dict, Tuple
+from sourcelib.associations import Associations
+from wholeslidedata.annotation.labels import Labels
+from wholeslidedata.data.files import WholeSlideAnnotationFile
 from wholeslidedata.annotation import utils as annotation_utils
-from wholeslidedata.dataset import DataSet, WholeSlideSampleReference
-from wholeslidedata.labels import Labels
-from wholeslidedata.source.associations import Associations
-from wholeslidedata.source.files import WholeSlideAnnotationFile
+from wholeslidedata.data.dataset import WholeSlideDataSet, WholeSlideSampleReference
 
 from .files import MultiResWholeSlideImageFile
 
 
-class MultiResWholeSlideDataSet(DataSet):
+class MultiResWholeSlideDataSet(WholeSlideDataSet):
     def __init__(
         self,
         mode,
         associations: Associations,
         labels: Labels = None,
-        cell_graph_extractor: str = "resnet34",
+        cell_graph_extractor: str = None,
         cell_graph_image_normalizer="vahadane",
         load_images=True,
         copy_path=None,
@@ -32,35 +32,42 @@ class MultiResWholeSlideDataSet(DataSet):
                 self.__class__.IMAGES_KEY: dict(),
                 self.__class__.ANNOTATIONS_KEY: dict(),
             }
+            spacings = []
             for wsi_index, wsi_file in enumerate(
-                associated_files[MultiResWholeSlideImageFile]
+                associated_files[MultiResWholeSlideImageFile.IDENTIFIER]
             ):
-                data[file_key][self.__class__.IMAGES_KEY][wsi_index] = self._open_image(
-                    wsi_file
-                )
-
+                image, spacing = self._open_image(wsi_file)
+                data[file_key][self.__class__.IMAGES_KEY][wsi_index] = image
+                spacings.append(spacing)
             for wsa_index, wsa_file in enumerate(
-                associated_files[WholeSlideAnnotationFile]
+                associated_files[WholeSlideAnnotationFile.IDENTIFIER]
             ):
                 data[file_key][self.__class__.ANNOTATIONS_KEY][
                     wsa_index
-                ] = self._open_annotation(wsa_file, labels=labels)
+                ] = self._open_annotation(wsa_file, spacing=spacings[0], labels=labels)
         return data
 
     def _open_image(self, wsi_file: MultiResWholeSlideImageFile):
         if self._copy_path:
             wsi_file.copy(self._copy_path)
-        if self._load_images:
-            return wsi_file.open(
-                cell_graph_extractor=self._cell_graph_extractor,
-                cell_graph_image_normalizer=self._cell_graph_image_normalizer,
-            )
-        return wsi_file
+        if not self._load_images:
+            if self._spacing is None:
+                raise ValueError("Load images is False, but no spacing is set")
+            return wsi_file, self._spacing
 
-    def _open_annotation(self, wsa_file: WholeSlideAnnotationFile, labels):
+        wsi = wsi_file.open(
+            cell_graph_extractor=self._cell_graph_extractor,
+            cell_graph_image_normalizer=self._cell_graph_image_normalizer,
+        )
+        spacing = wsi.spacings[0]
+        return wsi, spacing
+
+    def _open_annotation(
+        self, wsa_file: WholeSlideAnnotationFile, labels, spacing=None
+    ):
         if self._copy_path:
             wsa_file.copy(self._copy_path)
-        return wsa_file.open(labels=labels)
+        return wsa_file.open(spacing=spacing, labels=labels)
 
     def _init_labels(self):
         labels = []

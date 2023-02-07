@@ -2,21 +2,19 @@ import json
 import warnings
 import numpy as np
 from typing import List
+from wholeslidedata.annotation.types import Annotation
+from wholeslidedata.annotation.labels import Label, Labels
 from wholeslidedata.annotation.parser import AnnotationParser
-from wholeslidedata.annotation.structures import Annotation
-from wholeslidedata.labels import Labels, Label
 
 
 class QuPathAnnotationParser(AnnotationParser):
     @staticmethod
     def get_available_labels(opened_annotation: dict):
-        # Label is rgbint (see https://stackoverflow.com/questions/2262100/rgb-int-to-rgb-python)
         labels = []
         for annotation in opened_annotation:
             try:
                 _label = Label.create(
                     annotation["properties"]["classification"]["name"],
-                    annotation["properties"]["classification"]["colorRGB"],
                 )
                 labels.append(_label)
             except Exception:
@@ -48,7 +46,7 @@ class QuPathAnnotationParser(AnnotationParser):
 
             yield annotation
 
-    def parse(self, path) -> List[Annotation]:
+    def parse(self, path, spacing=None) -> List[Annotation]:
 
         if not self._path_exists(path):
             raise FileNotFoundError(path)
@@ -59,11 +57,10 @@ class QuPathAnnotationParser(AnnotationParser):
             return []
 
         annotations = []
-        index = 0
-        for annotation in self._parse(path):
+        for index, annotation in enumerate(self._parse(path)):
             annotation["index"] = index
             annotation["type"] = annotation["geometry"]["type"].lower()
-            # TODO: Implement multipolygon
+
             assert annotation["type"] in [
                 "polygon",
                 "multipolygon",
@@ -74,11 +71,12 @@ class QuPathAnnotationParser(AnnotationParser):
                     annotation["geometry"]["coordinates"][0]
                 )
                 annotation["label"] = self._rename_label(annotation["label"])
+                if spacing is not None:
+                    annotation["spacing"] = spacing
                 del annotation["properties"]
                 del annotation["geometry"]
+                annotation.update(self._kwargs)
                 annotations.append(Annotation.create(**annotation))
-                index += 1
-
             elif annotation["type"] == "multipolygon":
                 for coords in annotation["geometry"]["coordinates"]:
                     new_annotation = dict(
@@ -87,9 +85,11 @@ class QuPathAnnotationParser(AnnotationParser):
                         coordinates=coords[0],
                         label=self._rename_label(annotation["label"]),
                     )
+                    if spacing is not None:
+                        new_annotation["spacing"] = spacing
+                    new_annotation.update(self._kwargs)
                     annotations.append(Annotation.create(**new_annotation))
-                    index += 1
 
-        for hook in self._hooks:
-            annotations = hook(annotations)
+        for callback in self._callbacks:
+            annotations = callback(annotations)
         return annotations

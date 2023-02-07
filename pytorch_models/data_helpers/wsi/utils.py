@@ -3,21 +3,21 @@ from pathlib import Path
 from natsort import os_sorted
 from PIL import Image, ImageDraw
 from typing import List, Union, Dict
-
+from sourcelib.associations import associate_files
+from sourcelib.collect import get_files_from_folder
 from wholeslidedata.annotation.parser import AnnotationParser
-from wholeslidedata.annotation.structures import Annotation
+from wholeslidedata.annotation.types import Annotation
+from wholeslidedata.data.files import WholeSlideImageFile, WholeSlideAnnotationFile
+from wholeslidedata.data.mode import WholeSlideMode
 from wholeslidedata.samplers.annotationsampler import OrderedAnnotationSampler
 from wholeslidedata.samplers.batchsampler import BatchSampler
 from wholeslidedata.samplers.patchlabelsampler import SegmentationPatchLabelSampler
 from wholeslidedata.samplers.patchsampler import PatchSampler
 from wholeslidedata.samplers.pointsampler import CenterPointSampler
 from wholeslidedata.samplers.samplesampler import SampleSampler
-from wholeslidedata.samplers.structures import BatchShape
-from wholeslidedata.source.associations import associate_files
-from wholeslidedata.source.files import WholeSlideFile
-from wholeslidedata.source.utils import (
-    NoSourceFilesInFolderError,
-    factory_sources_from_paths,
+from wholeslidedata.samplers.batchshape import BatchShape
+from wholeslidedata.interoperability.openslide.backend import (
+    OpenSlideWholeSlideImageBackend,
 )
 
 from . import (
@@ -63,16 +63,16 @@ def create_batch_sampler(
         assert (
             slides_dir is not None and annotations_dir is not None
         ), "If 'image_files' is None then 'slides_dir' and 'annotations_dir' should be provided."
-        image_files = whole_slide_files_from_folder_factory(
-            slides_dir,
-            file_type,
-            excludes=[
-                "mask",
-            ],
-            filters=[
-                slide_extension,
-            ],
-            image_backend="openslide",
+
+        image_files = get_files_from_folder(
+            file_cls=MultiResWholeSlideImageFile
+            if file_type == "mrwsi"
+            else WholeSlideImageFile,
+            folder=slides_dir,
+            mode=WholeSlideMode.default,
+            excludes=["mask"],
+            filters=[slide_extension],
+            image_backend=OpenSlideWholeSlideImageBackend,
         )
 
         if ann_extension == ".geojson":
@@ -92,10 +92,11 @@ def create_batch_sampler(
                 ),
             ),
         )
-        annotation_files = whole_slide_files_from_folder_factory(
-            annotations_dir,
-            "wsa",
-            excludes=["tif"],
+
+        annotation_files = get_files_from_folder(
+            file_cls=WholeSlideAnnotationFile,
+            folder=annotations_dir,
+            mode=WholeSlideMode.default,
             filters=[ann_extension],
             annotation_parser=parser,
         )
@@ -152,35 +153,6 @@ def create_batch_sampler(
     batch_sampler = BatchSampler(dataset=dataset, sampler=sample_sampler)
 
     return batch_sampler, batch_ref_sampler, batch_shape
-
-
-def whole_slide_files_from_folder_factory(
-    folder: Union[str, Path],
-    file_type: Union[str, type],
-    mode: str = "default",
-    filters: List[str] = (),
-    excludes: List[str] = (),
-    recursive=False,
-    **kwargs,
-):
-    if file_type == "mrwsi":
-        class_type = MultiResWholeSlideImageFile
-    else:
-        class_type = WholeSlideFile.get_registrant(file_type)
-    all_sources = []
-    folder = Path(folder)
-    for extension in class_type.EXTENSIONS.names():
-        paths = os_sorted(
-            folder.rglob("*" + extension) if recursive else folder.glob("*" + extension)
-        )
-        sources = factory_sources_from_paths(
-            class_type, mode, paths, filters, excludes, **kwargs
-        )
-        all_sources.extend(sources)
-
-    if all_sources == []:
-        raise NoSourceFilesInFolderError(class_type, filters, excludes, folder)
-    return all_sources
 
 
 def get_annotation_mask(

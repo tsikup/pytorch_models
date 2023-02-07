@@ -1,8 +1,8 @@
 import numpy as np
 from typing import List
 from shapely import geometry
-from wholeslidedata.annotation.hooks import AnnotationHook
-from wholeslidedata.annotation.structures import Annotation
+from wholeslidedata.annotation.callbacks import AnnotationCallback
+from wholeslidedata.annotation.types import Annotation
 
 
 # class MaskedTiledAnnotationHook(AnnotationHook):
@@ -45,7 +45,7 @@ from wholeslidedata.annotation.structures import Annotation
 #         return new_annotations
 
 
-class MaskedTiledAnnotationHook(AnnotationHook):
+class MaskedTiledAnnotationHook(AnnotationCallback):
     def __init__(
         self,
         tile_size,
@@ -88,9 +88,8 @@ class MaskedTiledAnnotationHook(AnnotationHook):
                         new_annotations.append(
                             Annotation.create(
                                 index=index,
-                                type=annotation.type,
-                                coordinates=box_poly.exterior.coords,
                                 label=annotation.label.todict(),
+                                coordinates=box_poly.exterior.coords,
                             )
                         )
                         # Add intersection of box_poly with parent annotation.
