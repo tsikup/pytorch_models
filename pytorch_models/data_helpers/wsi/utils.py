@@ -6,6 +6,7 @@ from typing import List, Union, Dict
 
 from wholeslidedata.annotation.parser import AnnotationParser
 from wholeslidedata.annotation.structures import Annotation
+from wholeslidedata.dataset import WholeSlideDataSet
 from wholeslidedata.samplers.annotationsampler import OrderedAnnotationSampler
 from wholeslidedata.samplers.batchsampler import BatchSampler
 from wholeslidedata.samplers.patchlabelsampler import SegmentationPatchLabelSampler
@@ -56,10 +57,15 @@ def create_batch_sampler(
         labels = dict(tissue=0, tumor=1)
 
     if spacing is None:
-        spacing = dict(target=0.5, context=2.0, graph=0.25)
+        spacing = dict(target=0.5, context=2.0)
 
     if blurriness_threshold is None:
-        blurriness_threshold = dict(target=500, context=5000)
+        blurriness_threshold = dict(target=None, context=None)
+
+    if file_type == "wsi":
+        assert isinstance(
+            spacing, float
+        ), "Only one spacing is allowed for Uniresolution-WSI."
 
     if image_files is None:
         assert (
@@ -104,15 +110,24 @@ def create_batch_sampler(
     else:
         assert annotation_files is not None
 
-    associations = associate_files(image_files, annotation_files)
+    associations = associate_files(image_files, annotation_files, exact_match=True)
 
-    dataset = MultiResWholeSlideDataSet(
-        mode="default",
-        associations=associations,
-        labels=list(labels.keys()),
-        cell_graph_extractor="resnet34" if "graph" in spacing else None,
-        cell_graph_image_normalizer="vahadane",
-    )
+    if file_type == "mrwsi":
+        dataset = MultiResWholeSlideDataSet(
+            mode="default",
+            associations=associations,
+            labels=list(labels.keys()),
+            cell_graph_extractor="resnet34" if "graph" in spacing else None,
+            cell_graph_image_normalizer="vahadane",
+        )
+    else:
+        dataset = WholeSlideDataSet(
+            mode="default",
+            associations=associations,
+            labels=list(labels.keys()),
+            load_images=True,
+            copy_path=None,
+        )
 
     batch_ref_sampler = BatchOneTimeReferenceSampler(
         dataset=dataset,
@@ -123,15 +138,19 @@ def create_batch_sampler(
         annotation_sampler=OrderedAnnotationSampler(
             dataset.annotations_per_label, seed=seed
         )
-        if random_annotations
+        if not random_annotations
         else RandomOneTimeAnnotationSampler(dataset.annotations_per_label, seed=seed),
         point_sampler=CenterPointSampler(dataset=dataset, seed=seed),
     )
 
     batch_shape = BatchShape(
         batch_size,
-        spacing=[(key, value) for key, value in spacing.items()],
-        shape=[[tile_size, tile_size, 3] for _ in spacing],
+        spacing=[(key, value) for key, value in spacing.items()]
+        if file_type == "mrwsi"
+        else spacing,
+        shape=[[tile_size, tile_size, 3] for _ in spacing]
+        if file_type == "mrwsi"
+        else [tile_size, tile_size, 3],
         labels=dataset.sample_labels,
     )
 

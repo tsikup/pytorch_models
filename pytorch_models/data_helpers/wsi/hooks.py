@@ -99,13 +99,13 @@ class MaskedTiledAnnotationHook(AnnotationHook):
                             box_poly.intersection(annotation).type
                             == "GeometryCollection"
                         ):
-                            for intersection in box_poly.intersection(annotation):
+                            for intersection in box_poly.intersection(annotation).geoms:
                                 if intersection.type == "Polygon":
                                     intersections.append(
                                         np.array(intersection.exterior.coords)
                                     )
                                 elif intersection.type == "MultiPolygon":
-                                    for poly in intersection:
+                                    for poly in intersection.geoms:
                                         intersections.append(
                                             np.array(poly.exterior.coords)
                                         )

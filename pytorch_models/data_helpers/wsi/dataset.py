@@ -14,7 +14,7 @@ class MultiResWholeSlideDataSet(DataSet):
         mode,
         associations: Associations,
         labels: Labels = None,
-        cell_graph_extractor: str = "resnet34",
+        cell_graph_extractor: str = None,
         cell_graph_image_normalizer="vahadane",
         load_images=True,
         copy_path=None,
