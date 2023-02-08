@@ -30,6 +30,7 @@ from . import (
     MultiResSampleSampler,
     MultiResPatchSampler,
 )
+from .samplers import RandomOneTimeAnnotationSampler
 
 
 def create_batch_sampler(
@@ -48,6 +49,7 @@ def create_batch_sampler(
     batch_size: int = 1,
     labels: Union[Dict[str, int], None] = None,
     spacing: Union[Dict[str, float], None] = None,
+    random_annotations: bool = False,
     seed=123,
 ):
     if labels is None:
@@ -120,7 +122,9 @@ def create_batch_sampler(
         ),
         annotation_sampler=OrderedAnnotationSampler(
             dataset.annotations_per_label, seed=seed
-        ),
+        )
+        if random_annotations
+        else RandomOneTimeAnnotationSampler(dataset.annotations_per_label, seed=seed),
         point_sampler=CenterPointSampler(dataset=dataset, seed=seed),
     )
 

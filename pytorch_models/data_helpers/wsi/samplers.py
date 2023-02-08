@@ -1,5 +1,7 @@
 from typing import Union, Dict
+import numpy as np
 from wholeslidedata import WholeSlideAnnotation
+from wholeslidedata.samplers.annotationsampler import AnnotationSampler
 from wholeslidedata.samplers.batchreferencesampler import BatchReferenceSampler
 from wholeslidedata.samplers.labelsampler import LabelSampler
 from wholeslidedata.samplers.patchlabelsampler import PatchLabelSampler
@@ -153,6 +155,34 @@ class MultiResSampleSampler(SampleSampler):
                 patch, mask = callback(patch, mask)
 
         return patch, mask
+
+
+@AnnotationSampler.register(("randomonetime",))
+class RandomOneTimeAnnotationSampler(AnnotationSampler):
+    def __init__(self, counts_per_label, seed):
+        super().__init__(counts_per_label=counts_per_label, seed=seed)
+        self._counters = {label: 0 for label in self._counts_per_label.keys()}
+        self._counts = {
+            label: list(range(self._counts_per_label[label]))
+            for label in self._counts_per_label.keys()
+        }
+        self.reset()
+
+    def _next(self, label):
+        if not self._counts[label]:
+            return None
+        annotation_index = self._rng.choice(self._counts[label])
+        self._counts[label].remove(annotation_index)
+        return annotation_index
+
+    def _reset_label(self, label):
+        pass
+
+    def update(self, data):
+        pass
+
+    def reset(self):
+        self.set_seed()
 
 
 @LabelSampler.register(("ordered_onetime",))
