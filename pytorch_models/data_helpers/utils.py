@@ -16,10 +16,16 @@ def calculate_mean_and_std(channels_sum, channels_squared_sum, num_batches):
 def get_channels_sums_from_ndarray(
     data: np.ndarray, channels_last=False, max_value=255.0
 ):
-    if channels_last:
-        channels = (0, 1)
-    else:
-        channels = (1, 2)
+    if len(data.shape) == 3:
+        if channels_last:
+            channels = (0, 1)
+        else:
+            channels = (1, 2)
+    elif len(data.shape) == 4:
+        if channels_last:
+            channels = (0, 1, 2)
+        else:
+            channels = (0, 2, 3)
 
     if data.dtype == np.uint8:
         data = data.astype(np.float32)
