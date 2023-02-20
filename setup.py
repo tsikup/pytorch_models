@@ -22,7 +22,6 @@ setup(
         "pytorch_models.models.ssl_features",
         "pytorch_models.models.classification",
         "pytorch_models.data_helpers",
-        "pytorch_models.data_helpers.wsi",
     ],
     url="https://github.com/tsikup/pytorch_models",
     license="MIT",
