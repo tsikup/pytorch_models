@@ -88,7 +88,7 @@ def create_batch_sampler(
         else:
             parser = AnnotationParser
         parser = parser(
-            labels={"tumor": 1, "tissue": 0},
+            labels=labels,
             hooks=(
                 MaskedTiledAnnotationHook(
                     tile_size=tile_size,
