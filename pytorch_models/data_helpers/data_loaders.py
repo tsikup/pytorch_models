@@ -596,7 +596,10 @@ class DatasetHDF5(Dataset):
 
         image = self.images[i]
         if not self.image_only:
-            label = np.array([self.labels[i]])
+            try:
+                label = np.array([self.labels[i]])
+            except IndexError:
+                label = np.array([self.labels[0]])
 
         if not self.image_only and self.segmentation and len(label.shape) == 2:
             label = np.expand_dims(label, axis=-1)
@@ -950,7 +953,15 @@ class FeatureDatasetOneHDF5(Dataset):
             self.open_hdf5()
 
         _features = torch.from_numpy(self.features[i])
-        _label = torch.from_numpy(np.array([self.labels[i]], dtype=self.labels.dtype))
+        try:
+            _label = torch.from_numpy(
+                np.array([self.labels[i]], dtype=self.labels.dtype)
+            )
+        except IndexError:
+            _label = torch.from_numpy(
+                np.array([self.labels[0]], dtype=self.labels.dtype)
+            )
+
         if self.multiresolution:
             _features_context = torch.from_numpy(self.features_context[i])
             return dict(features=_features, features_context=_features_context), _label
