@@ -168,7 +168,8 @@ class CLAM_SB(nn.Module):
         ), "Mismatch between attention module output feature size and classifiers' input feature size"
 
         if (
-            self.multires_aggregation["attention"] in ["late"]
+            self.multires_aggregation is not None
+            and self.multires_aggregation["attention"] == "late"
             and self.multires_aggregation["features"] == "concat"
         ):
             last_layer = self.classifier_size[-1]
@@ -441,7 +442,10 @@ class CLAM_SB(nn.Module):
             A, h = self.apply_attention_net(h, self.target_net, self.attention_net)
             A = torch.transpose(A, 1, 0)  # KxN
 
-        if self.multires_aggregation["attention"] == "late":
+        if (
+            self.multires_aggregation is not None
+            and self.multires_aggregation["attention"] == "late"
+        ):
             if attention_only:
                 return A, A_context
             A_raw = A
