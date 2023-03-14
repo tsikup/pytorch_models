@@ -18,7 +18,6 @@ setup(
         "pytorch_models.models.segmentation",
         "pytorch_models.models.segmentation.unet",
         "pytorch_models.models.segmentation.deeplab",
-        "pytorch_models.models.segmentation.my_models",
         "pytorch_models.models.ssl_features",
         "pytorch_models.models.classification",
         "pytorch_models.data_helpers",
