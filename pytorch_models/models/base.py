@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import pytorch_lightning as pl
-from typing import List
+from typing import List, Union
 from dotmap import DotMap
 from timm.optim import AdamP
 from torch.optim.lr_scheduler import *
@@ -34,7 +34,7 @@ class BaseModel(pl.LightningModule):
         self,
         config: DotMap,
         n_classes: int,
-        in_channels: int,
+        in_channels: Union[int, None],
         segmentation=False,
     ):
         super().__init__()
@@ -110,11 +110,11 @@ class BaseModel(pl.LightningModule):
     def l12_regularisation(self, l1_w=0.3, l2_w=0.7):
         return l1_w * self.l_regularisation(1) + l2_w * self.l_regularisation(2)
 
-    def forward_shared(self, batch):
+    def forward(self, batch):
         # Batch
         images, target = batch
         # Prediction
-        logits = self.forward(images)
+        logits = self._forward(images)
         # Loss (on logits)
         loss = self.loss.forward(logits, target.float())
 
@@ -384,11 +384,11 @@ class BaseModel(pl.LightningModule):
             for pg in optimizer.param_groups:
                 pg["lr"] = lr_scale * self.learning_rate
 
-    def forward(self, x):
+    def _forward(self, x):
         raise NotImplementedError
 
     def training_step(self, batch, batch_idx):
-        output = self.forward_shared(batch)
+        output = self.forward(batch)
         images, target, preds, loss = (
             output["images"],
             output["target"],
@@ -399,7 +399,7 @@ class BaseModel(pl.LightningModule):
         return {"loss": loss, "preds": preds, "target": target}
 
     def validation_step(self, batch, batch_idx):
-        output = self.forward_shared(batch)
+        output = self.forward(batch)
         images, target, preds, loss = (
             output["images"],
             output["target"],
@@ -410,7 +410,7 @@ class BaseModel(pl.LightningModule):
         return {"val_loss": loss, "val_preds": preds, "val_target": target}
 
     def test_step(self, batch, batch_idx):
-        output = self.forward_shared(batch)
+        output = self.forward(batch)
 
         print(output)
 
@@ -476,11 +476,11 @@ class BaseMILModel(BaseModel):
             config, n_classes=n_classes, in_channels=None, segmentation=False
         )
 
-    def forward_shared(self, batch, is_predict=False):
+    def forward(self, batch, is_predict=False):
         # Batch
         features, target = batch
         # Prediction
-        logits = self.forward(features)
+        logits = self._forward(features)
         # Loss (on logits)
         loss = self.loss.forward(logits, target.float())
         # Sigmoid or Softmax activation
@@ -490,11 +490,11 @@ class BaseMILModel(BaseModel):
             preds = torch.nn.functional.softmax(logits, dim=1)
         return {"features": features, "target": target, "preds": preds, "loss": loss}
 
-    def forward(self, x):
+    def _forward(self, x):
         raise NotImplementedError
 
     def training_step(self, batch, batch_idx):
-        output = self.forward_shared(batch)
+        output = self.forward(batch)
         features, target, preds, loss = (
             output["features"],
             output["target"],
@@ -505,7 +505,7 @@ class BaseMILModel(BaseModel):
         return {"loss": loss, "preds": preds, "target": target}
 
     def validation_step(self, batch, batch_idx):
-        output = self.forward_shared(batch)
+        output = self.forward(batch)
         features, target, preds, loss = (
             output["features"],
             output["target"],
@@ -516,7 +516,7 @@ class BaseMILModel(BaseModel):
         return {"val_loss": loss, "val_preds": preds, "val_target": target}
 
     def test_step(self, batch, batch_idx):
-        output = self.forward_shared(batch)
+        output = self.forward(batch)
 
         features, target, preds, loss = (
             output["features"],
@@ -531,7 +531,7 @@ class BaseMILModel(BaseModel):
 
     def predict_step(self, batch, batch_idx):
         _, labels = batch
-        output = self.forward_shared(batch, is_predict=True)
+        output = self.forward(batch, is_predict=True)
 
         return output["preds"], labels
 
@@ -579,22 +579,20 @@ class EnsembleInferenceModel(BaseModel):
             weighted_preds = torch.sum(weighted_preds) / sum(self.model_weights)
             return weighted_preds
 
-    def forward_shared(self, batch):
-        return self.forward(batch)
-
     def forward(self, batch):
+        return self._forward(batch)
+
+    def _forward(self, batch):
         _, target = batch
 
-        outcomes = [
-            model.forward_shared(batch, is_predict=True) for model in self.models
-        ]
+        outcomes = [model.forward(batch, is_predict=True) for model in self.models]
 
         preds = self.aggregate_predictions([o["preds"] for o in outcomes])
 
         return dict(preds=preds, target=target)
 
     def test_step(self, batch, batch_idx):
-        output = self.forward_shared(batch)
+        output = self.forward(batch)
 
         target, preds = output["target"], output["preds"]
 
@@ -603,6 +601,6 @@ class EnsembleInferenceModel(BaseModel):
         return {"test_preds": preds, "test_target": target}
 
     def predict_step(self, batch, batch_idx):
-        output = self.forward_shared(batch, is_predict=True)
+        output = self.forward(batch, is_predict=True)
 
         return output["preds"]

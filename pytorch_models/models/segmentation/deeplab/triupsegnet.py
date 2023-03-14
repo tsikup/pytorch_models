@@ -137,7 +137,7 @@ class TriUpSegNetA(BaseModel):
 
         self.fc4 = _ConvBatchNormReLU(304, 256, 3, 1, 1, 1)
 
-    def forward(self, x):
+    def _forward(self, x):
         h, h_, h_2 = self.backbone(x)
         # Layer fc2 + upsampling + concat
         h = self.fc2(h)
@@ -188,7 +188,7 @@ class TriUpSegNetB(BaseModel):
         # fc1 in deeplab implementation
         self.fc2 = _ConvBatchNormReLU(256 * (len(pyramids) + 2), 256, 1, 1, 0, 1)
 
-    def forward(self, x):
+    def _forward(self, x):
         h, h_, h_2 = self.backbone(x)
         # Layer fc2
         h = self.fc2(h)

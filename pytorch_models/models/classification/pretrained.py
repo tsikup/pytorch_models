@@ -126,7 +126,7 @@ class PretrainedModel(BaseModel):
         features = features
         return features
 
-    def forward(self, x):
+    def _forward(self, x):
         y = self._forward_features(x)
         y = self.classifier(y)
         return y

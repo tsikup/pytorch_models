@@ -334,7 +334,7 @@ class MIL_PL(BaseMILModel):
                 top_k=self.top_k,
             )
 
-    def forward_shared(self, batch):
+    def forward(self, batch):
         if (
             "top_k" in self.aggregates
             or "clam" in self.aggregates
@@ -343,7 +343,7 @@ class MIL_PL(BaseMILModel):
             # Batch
             features, target = batch
             # Prediction
-            logits, preds, _, _, results_dict = self.forward(features)
+            logits, preds, _, _, results_dict = self._forward(features)
             # Loss (on logits)
             loss = self.loss.forward(logits, target.squeeze())
             # loss = self.loss.forward(logits, target.float())
@@ -359,5 +359,5 @@ class MIL_PL(BaseMILModel):
         else:
             return super(MIL_PL, self).forward_shared(batch)
 
-    def forward(self, x):
+    def _forward(self, x):
         return self.model.forward(x)

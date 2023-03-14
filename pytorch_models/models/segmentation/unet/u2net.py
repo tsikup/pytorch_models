@@ -356,7 +356,7 @@ class U2NET(BaseModel):
 
         self.outconv = nn.Conv2d(6 * out_ch, out_ch, 1)
 
-    def forward(self, x):
+    def _forward(self, x):
 
         hx = x
 
@@ -468,7 +468,7 @@ class U2NETP(BaseModel):
 
         self.outconv = nn.Conv2d(6 * out_ch, out_ch, 1)
 
-    def forward(self, x):
+    def _forward(self, x):
 
         hx = x
 

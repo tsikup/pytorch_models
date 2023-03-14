@@ -223,5 +223,5 @@ class PLDenseUNet(BaseModel):
             progress=None,
         )
 
-    def forward(self, x):
+    def _forward(self, x):
         return self.model(x)

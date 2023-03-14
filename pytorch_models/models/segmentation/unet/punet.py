@@ -328,7 +328,7 @@ class ProbabilisticUnet(BaseModel):
             use_tile=True,
         )
 
-    def forward(self, patch, segm, training=True):
+    def _forward(self, patch, segm, training=True):
         """
         Construct prior latent space for patch and run patch through UNet,
         in case training is True also construct posterior latent space

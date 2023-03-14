@@ -163,7 +163,7 @@ class HookNet(BaseModel):
             name="target",
         )
 
-    def forward(self, context, target):
+    def _forward(self, context, target):
         context, con_residuals = self.context_encoder.forward(context)
         context = self.context_mid_conv.forward(context)
 

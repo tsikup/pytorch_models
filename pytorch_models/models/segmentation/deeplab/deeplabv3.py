@@ -36,7 +36,7 @@ class MyDeepLabV3(BaseModel):
             if isinstance(m[1], nn.BatchNorm2d):
                 m[1].eval()
 
-    def forward(self, x):
+    def _forward(self, x):
         return self.model(x)
 
 

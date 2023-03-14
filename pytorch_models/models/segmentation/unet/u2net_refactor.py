@@ -98,7 +98,7 @@ class U2NET(BaseModel):
         self.out_ch = out_ch
         self._make_layers(cfgs)
 
-    def forward(self, x):
+    def _forward(self, x):
         sizes = _size_map(x, self.height)
         maps = []  # storage for maps
 

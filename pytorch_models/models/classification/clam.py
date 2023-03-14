@@ -130,15 +130,13 @@ class CLAM_SB(nn.Module):
         if instance_loss_fn == "svm":
             self.instance_loss_fn = SmoothTop1SVM(n_classes=n_classes)
             self.instance_loss_on_gpu = False
-            # if torch.cuda.is_available():
-            #     self.instance_loss_fn = self.instance_loss_fn.cuda()
         else:
             self.instance_loss_fn = nn.CrossEntropyLoss()
 
         if isinstance(size_arg, list):
             size = size_arg
         else:
-            size = size = self.size_dict[size_arg]
+            size = self.size_dict[size_arg]
 
         assert (
             attention_depth is not None
@@ -744,7 +742,7 @@ class CLAM_Image_PL(BaseMILModel):
             features = self.backbone.forward(patches)
         return features
 
-    def forward_shared(self, batch, is_predict=False):
+    def forward(self, batch, is_predict=False):
         # Batch
         patches, target = batch
 
@@ -756,7 +754,7 @@ class CLAM_Image_PL(BaseMILModel):
             images["images_context"] = None
 
         # Prediction
-        logits, preds, _, _, results_dict = self.forward(
+        logits, preds, _, _, results_dict = self._forward(
             h=images["images"],
             h_context=images["images_context"],
             label=target,
@@ -784,7 +782,7 @@ class CLAM_Image_PL(BaseMILModel):
             "loss": loss,
         }
 
-    def forward(
+    def _forward(
         self,
         h,
         h_context=None,
@@ -866,12 +864,12 @@ class CLAM_Features_PL(BaseMILModel):
         #         multires_aggregation=self.multires_aggregation,
         #     )
 
-    def forward_shared(self, batch, is_predict=False):
+    def forward(self, batch, is_predict=False):
         # Batch
         features, target = batch
 
         # Prediction
-        logits, preds, _, _, results_dict = self.forward(
+        logits, preds, _, _, results_dict = self._forward(
             h=features["features"],
             h_context=features["features_context"]
             if self.multires_aggregation is not None and "features_context" in features
@@ -902,7 +900,7 @@ class CLAM_Features_PL(BaseMILModel):
             "loss": loss,
         }
 
-    def forward(
+    def _forward(
         self,
         h,
         h_context=None,

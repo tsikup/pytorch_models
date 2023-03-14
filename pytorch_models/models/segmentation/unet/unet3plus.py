@@ -218,7 +218,7 @@ class UNet3Plus(BaseModel):
             elif isinstance(m, nn.BatchNorm2d):
                 init_weights(m, init_type="kaiming")
 
-    def forward(self, inputs):
+    def _forward(self, inputs):
         ## -------------Encoder-------------
         h1 = self.conv1(inputs)  # h1->320*320*64
 

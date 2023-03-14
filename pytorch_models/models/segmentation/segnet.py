@@ -94,7 +94,7 @@ class SegNet(BaseModel):
         self.ConvDe11 = nn.Conv2d(64, self.out_chn, kernel_size=3, padding=1)
         self.BNDe11 = nn.BatchNorm2d(self.out_chn, momentum=BN_momentum)
 
-    def forward(self, x):
+    def _forward(self, x):
         # ENCODE LAYERS
         # Stage 1
         x = F.relu(self.BNEn11(self.ConvEn11(x)))

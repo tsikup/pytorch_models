@@ -76,7 +76,7 @@ class UNet(BaseModel):
         final = final.view(B, N, H, W)
         return final
 
-    def forward(self, inputs):
+    def _forward(self, inputs):
         # conv1 = self.conv1(inputs)  # 16*512*1024
         # maxpool1 = self.maxpool1(conv1)  # 16*256*512
         #

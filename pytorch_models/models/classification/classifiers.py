@@ -106,5 +106,5 @@ class NNClassifierPL(BaseModel):
             activation="relu",
         )
 
-    def forward(self, x):
+    def _forward(self, x):
         return self.model.forward(x)

@@ -56,7 +56,7 @@ class FPN(BaseModel):
         sample = nn.Upsample(size=(h, w), mode="bilinear", align_corners=True)
         return sample(x)
 
-    def forward(self, x):
+    def _forward(self, x):
         # Bottom-up
         c1 = self.maxpool(self.conv_down1(x))
         c2 = self.maxpool(self.conv_down2(c1))

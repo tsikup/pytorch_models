@@ -79,7 +79,7 @@ class UNet2Plus(BaseModel):
             elif isinstance(m, nn.BatchNorm2d):
                 init_weights(m, init_type="kaiming")
 
-    def forward(self, inputs):
+    def _forward(self, inputs):
         # column : 0
         X_00 = self.conv00(inputs)
         maxpool0 = self.maxpool0(X_00)

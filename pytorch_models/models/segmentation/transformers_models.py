@@ -40,7 +40,7 @@ class MyTransUnet(BaseModel):
         if pretrained:
             self.model.load_from(weights=np.load(config_vit.pretrained_path))
 
-    def forward(self, x):
+    def _forward(self, x):
         return self.model(x)
 
 
@@ -77,22 +77,5 @@ class BotNet(BaseModel):
             nn.Linear(2048, 1000)
         )
 
-    def forward(self, x):
+    def _forward(self, x):
         return self.model(x)
-
-
-if __name__ == "__main__":
-    import torch
-    import json
-    from dotmap import DotMap
-    from definitions import ROOT_DIR
-
-    with open(
-        os.path.join(ROOT_DIR, "assets/configs/training_seg_config.json"), "r"
-    ) as f:
-        config = DotMap(json.load(f))
-
-    a = torch.rand(2, 3, 512, 512)
-    model = MyTransUnet(config, pretrained=False)
-    y = model.forward(a)  # [2, 1, 512, 512]
-    print(y.shape)

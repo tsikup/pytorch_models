@@ -12,5 +12,5 @@ class FCN_ResNet50(BaseModel):
             num_classes=self.n_classes,
         )
 
-    def forward(self, x):
+    def _forward(self, x):
         return self.net(x)
