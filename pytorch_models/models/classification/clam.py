@@ -712,17 +712,18 @@ class CLAM_Image_PL(BaseMILModel):
                 attention_depth=attention_depth,
                 classifier_depth=classifier_depth,
             )
-        # else:
-        #     self.model = CLAM_MB(
-        #         gate=self.gate,
-        #         size_arg=size_arg,
-        #         dropout=dropout,
-        #         k_sample=self.k_sample,
-        #         n_classes=self.n_classes,
-        #         subtyping=self.subtyping,
-        #         instance_loss_fn=self.instance_loss,
-        #         multires_aggregation=self.multires_aggregation,
-        #     )
+        else:
+            raise NotImplementedError
+            # self.model = CLAM_MB(
+            #     gate=self.gate,
+            #     size_arg=size_arg,
+            #     dropout=dropout,
+            #     k_sample=self.k_sample,
+            #     n_classes=self.n_classes,
+            #     subtyping=self.subtyping,
+            #     instance_loss_fn=self.instance_loss,
+            #     multires_aggregation=self.multires_aggregation,
+            # )
 
     def compute_features(self, patches):
         if patches is None:
