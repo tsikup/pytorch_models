@@ -80,9 +80,8 @@ class TransMIL(nn.Module):
         return h
 
     def forward(self, data):
-        h = ()
-        for key, value in data.items():  # [B, n, 1024] if size[0] == 1024
-            h += (value.float(),)
+        h = (h.float() for h in data)  # list of [B, n, 1024] if size[0] == 1024
+
         if self.multiresolution:
             h = self._aggregate_multires_features(h, self.aggregate_method)
         else:
