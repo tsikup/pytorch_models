@@ -6,7 +6,6 @@ from torchmetrics import (
     Specificity,
     Recall,
     Precision,
-    AUC,
     AUROC,
     F1Score,
 )
@@ -51,7 +50,7 @@ def get_classification_metrics(
                     threshold=config.metrics.threshold,
                     num_classes=1,
                 ),
-                AUROC(num_classes=None),
+                AUROC(task="binary"),
             ]
         )
     else:
@@ -113,6 +112,10 @@ def get_classification_metrics(
                         num_classes=n_classes,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
+                    AUROC(
+                        task="multiclass",
+                        num_classes=n_classes,
+                    ),
                 ],
                 postfix="_macro",
             ),
@@ -146,6 +149,10 @@ def get_classification_metrics(
                             average="none",
                             num_classes=1 if n_classes in [1, 2] else n_classes,
                             dist_sync_on_step=dist_sync_on_step,
+                        ),
+                        AUROC(
+                            task="binary" if n_classes in [1, 2] else "multiclass",
+                            num_classes=n_classes,
                         ),
                     ]
                 )
