@@ -777,7 +777,6 @@ class CLAM_Image_PL(BaseMILModel):
         preds = torch.unsqueeze(preds, dim=1)
 
         return {
-            "features": results_dict["features"],
             "target": target,
             "preds": preds,
             "loss": loss,
@@ -895,7 +894,6 @@ class CLAM_Features_PL(BaseMILModel):
             preds = torch.unsqueeze(preds, dim=1)
 
         return {
-            "features": results_dict["features"],
             "target": target,
             "preds": preds,
             "loss": loss,
