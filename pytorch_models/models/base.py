@@ -488,15 +488,14 @@ class BaseMILModel(BaseModel):
             preds = logits.sigmoid()
         else:
             preds = torch.nn.functional.softmax(logits, dim=1)
-        return {"features": features, "target": target, "preds": preds, "loss": loss}
+        return {"target": target, "preds": preds, "loss": loss}
 
     def _forward(self, x):
         raise NotImplementedError
 
     def training_step(self, batch, batch_idx):
         output = self.forward(batch)
-        features, target, preds, loss = (
-            output["features"],
+        target, preds, loss = (
             output["target"],
             output["preds"],
             output["loss"],
@@ -506,8 +505,7 @@ class BaseMILModel(BaseModel):
 
     def validation_step(self, batch, batch_idx):
         output = self.forward(batch)
-        features, target, preds, loss = (
-            output["features"],
+        target, preds, loss = (
             output["target"],
             output["preds"],
             output["loss"],
@@ -518,8 +516,7 @@ class BaseMILModel(BaseModel):
     def test_step(self, batch, batch_idx):
         output = self.forward(batch)
 
-        features, target, preds, loss = (
-            output["features"],
+        target, preds, loss = (
             output["target"],
             output["preds"],
             output["loss"],
