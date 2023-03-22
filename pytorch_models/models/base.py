@@ -21,6 +21,7 @@ from torch.optim import (
 )
 from ranger21 import Ranger21
 from pytorch_models.losses.losses import get_loss
+from pytorch_models.optim.lookahead import Lookahead
 from pytorch_models.optim.utils import get_warmup_factor
 from pytorch_models.utils.metrics.metrics import get_metrics
 
@@ -248,7 +249,13 @@ class BaseModel(pl.LightningModule):
                 **OPTIM_ARGS[self.config.trainer.optimizer.lower()],
             )
 
+        if self.config.trainer.lookahead:
+            optimizer = Lookahead(optimizer=optimizer, k=5, alpha=0.5)
+
         # if self.config.trainer.optimizer_lars:
+        #     assert (
+        #         not self.config.trainer.lookahead
+        #     ), "Lookahead and LARS cannot be used together."
         #     # Layer-wise Adaptive Rate Scaling for large batch training.
         #     # Introduced by "Large Batch Training of Convolutional Networks" by Y. You,
         #     # I. Gitman, and B. Ginsburg. (https://arxiv.org/abs/1708.03888)
