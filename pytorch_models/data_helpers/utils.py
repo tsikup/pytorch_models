@@ -3,13 +3,14 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from tqdm.contrib.telegram import tqdm as ttqdm
+
 from ..utils.utils import setall
 
 
-def calculate_mean_and_std(channels_sum, channels_squared_sum, num_batches):
-    mean = channels_sum / num_batches
+def calculate_mean_and_std(channels_sum, channels_squared_sum, count):
+    mean = channels_sum / count
     # std = sqrt(E[X^2] - (E[X])^2)
-    std = (channels_squared_sum / num_batches - mean**2) ** 0.5
+    std = (channels_squared_sum / count - mean**2) ** 0.5
     return mean, std
 
 
@@ -30,12 +31,13 @@ def get_channels_sums_from_ndarray(
             channels = (2, 3)
 
     if data.dtype == np.uint8:
-        data = data.astype(np.float32)
         data = data / max_value
-    # Mean over batch, height and width, but not over the channels
+
+    # Mean over height and width, but not over the channels and batch
     channels_sums = data.mean(axis=channels)
     channels_squared_sum = (data**2).mean(axis=channels)
 
+    # Aggregate over batch
     if aggregate:
         channels_sums = channels_sums.sum(axis=0)
         channels_squared_sum = channels_squared_sum.sum(axis=0)
