@@ -143,6 +143,8 @@ class TransMIL_Features_PL(BaseMILModel):
         # Batch
         features, target = batch
 
+        features = [features[key] for key in features.keys()]
+
         # Prediction
         results_dict = self._forward(data=features)
         logits = results_dict["logits"]
