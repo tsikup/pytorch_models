@@ -31,22 +31,27 @@ def get_classification_metrics(
         metrics = MetricCollection(
             [
                 Accuracy(
+                    task="binary",
                     threshold=config.metrics.threshold,
                     num_classes=1,
                 ),
                 Recall(
+                    task="binary",
                     threshold=config.metrics.threshold,
                     num_classes=1,
                 ),
                 Specificity(
+                    task="binary",
                     threshold=config.metrics.threshold,
                     num_classes=1,
                 ),
                 Precision(
+                    task="binary",
                     threshold=config.metrics.threshold,
                     num_classes=1,
                 ),
                 F1Score(
+                    task="binary",
                     threshold=config.metrics.threshold,
                     num_classes=1,
                 ),
@@ -58,26 +63,31 @@ def get_classification_metrics(
             MetricCollection(
                 [
                     Accuracy(
+                        task="multiclass",
                         average="micro",
                         num_classes=n_classes,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     Recall(
+                        task="multiclass",
                         average="micro",
                         num_classes=n_classes,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     Specificity(
+                        task="multiclass",
                         average="micro",
                         num_classes=n_classes,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     Precision(
+                        task="multiclass",
                         average="micro",
                         num_classes=n_classes,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     F1Score(
+                        task="multiclass",
                         average="micro",
                         num_classes=n_classes,
                         dist_sync_on_step=dist_sync_on_step,
@@ -88,26 +98,31 @@ def get_classification_metrics(
             MetricCollection(
                 [
                     Accuracy(
+                        task="multiclass",
                         average="macro",
                         num_classes=n_classes,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     Recall(
+                        task="multiclass",
                         average="macro",
                         num_classes=n_classes,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     Specificity(
+                        task="multiclass",
                         average="macro",
                         num_classes=n_classes,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     Precision(
+                        task="multiclass",
                         average="macro",
                         num_classes=n_classes,
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     F1Score(
+                        task="multiclass",
                         average="macro",
                         num_classes=n_classes,
                         dist_sync_on_step=dist_sync_on_step,
@@ -126,26 +141,31 @@ def get_classification_metrics(
                 MetricCollection(
                     [
                         Accuracy(
+                            task="binary" if n_classes in [1, 2] else "multiclass",
                             average="none",
                             num_classes=1 if n_classes in [1, 2] else n_classes,
                             dist_sync_on_step=dist_sync_on_step,
                         ),
                         Recall(
+                            task="binary" if n_classes in [1, 2] else "multiclass",
                             average="none",
                             num_classes=1 if n_classes in [1, 2] else n_classes,
                             dist_sync_on_step=dist_sync_on_step,
                         ),
                         Specificity(
+                            task="binary" if n_classes in [1, 2] else "multiclass",
                             average="none",
                             num_classes=1 if n_classes in [1, 2] else n_classes,
                             dist_sync_on_step=dist_sync_on_step,
                         ),
                         Precision(
+                            task="binary" if n_classes in [1, 2] else "multiclass",
                             average="none",
                             num_classes=1 if n_classes in [1, 2] else n_classes,
                             dist_sync_on_step=dist_sync_on_step,
                         ),
                         F1Score(
+                            task="binary" if n_classes in [1, 2] else "multiclass",
                             average="none",
                             num_classes=1 if n_classes in [1, 2] else n_classes,
                             dist_sync_on_step=dist_sync_on_step,
