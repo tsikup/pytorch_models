@@ -1,4 +1,4 @@
-from pytorch_lightning.callbacks import (
+from lightning.pytorch.callbacks import (
     Callback,
     DeviceStatsMonitor,
     EarlyStopping,
@@ -6,7 +6,7 @@ from pytorch_lightning.callbacks import (
     ModelCheckpoint,
     StochasticWeightAveraging,
 )
-from pytorch_lightning.loggers import CometLogger
+from lightning.pytorch.loggers import CometLogger
 
 
 def get_callbacks(config):

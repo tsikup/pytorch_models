@@ -40,7 +40,7 @@ setup(
         "shapely",
         "torch",
         "torchvision",
-        "pytorch_lightning",
+        "lightning",
         "torchmetrics",
         "pydensecrf",
         "scipy",

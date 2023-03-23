@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-import pytorch_lightning as pl
+import lightning as L
 from typing import List, Union
 from dotmap import DotMap
 from timm.optim import AdamP
@@ -30,7 +30,7 @@ from pytorch_models.utils.metrics.metrics import get_metrics
 #  https://github.com/YtongXie/CoTr/blob/main/CoTr_package/CoTr/network_architecture/neural_network.py
 
 
-class BaseModel(pl.LightningModule):
+class BaseModel(L.LightningModule):
     def __init__(
         self,
         config: DotMap,
@@ -543,7 +543,7 @@ class BaseMILModel(BaseModel):
 class EnsembleInferenceModel(BaseModel):
     def __init__(
         self,
-        base_class: pl.LightningModule,
+        base_class: L.LightningModule,
         model_ckpts: List[str],
         config: DotMap,
         n_classes: int,

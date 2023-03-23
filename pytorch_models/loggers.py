@@ -1,4 +1,4 @@
-from pytorch_lightning.loggers import TensorBoardLogger, CometLogger
+from lightning.pytorch.loggers import CometLogger, TensorBoardLogger
 
 
 def get_loggers(config):

@@ -7,7 +7,7 @@ import torchvision
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import pytorch_lightning as pl
+import lightning as L
 import albumentations as A
 from PIL import Image
 from pathlib import Path
@@ -23,7 +23,7 @@ from .data_augmentors import get_augmentor
 from ..utils.tensor import UnNormalize, tensor_to_image
 
 
-class DataModuleHDF5(pl.LightningDataModule):
+class DataModuleHDF5(L.LightningDataModule):
     def __init__(
         self,
         config: DotMap,
