@@ -1,30 +1,32 @@
-import torch
-import numpy as np
+from typing import Any, Callable, List, Optional, Union
+
 import lightning as L
-from typing import List, Union
-from dotmap import DotMap
-from timm.optim import AdamP
-from torch.optim.lr_scheduler import *
-from torch.optim.lr_scheduler import OneCycleLR
+import numpy as np
+import torch
 from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
-from torch.optim import (
-    Adam,
-    AdamW,
-    Adamax,
-    RAdam,
-    NAdam,
-    SparseAdam,
-    SGD,
-    ASGD,
-    Adagrad,
-    Adadelta,
-)
-from ranger21 import Ranger21
+from dotmap import DotMap
+from lightning.pytorch.core.optimizer import LightningOptimizer
 from pytorch_models.losses.losses import get_loss
 from pytorch_models.optim.lookahead import Lookahead
 from pytorch_models.optim.utils import get_warmup_factor
 from pytorch_models.utils.metrics.metrics import get_metrics
-
+from ranger21 import Ranger21
+from timm.optim import AdamP
+from torch.optim import (
+    ASGD,
+    SGD,
+    Adadelta,
+    Adagrad,
+    Adam,
+    Adamax,
+    AdamW,
+    NAdam,
+    Optimizer,
+    RAdam,
+    SparseAdam,
+)
+from torch.optim.lr_scheduler import *
+from torch.optim.lr_scheduler import OneCycleLR
 
 # TODO: inference sliding window
 #  https://github.com/YtongXie/CoTr/blob/main/CoTr_package/CoTr/network_architecture/neural_network.py
@@ -367,15 +369,11 @@ class BaseModel(L.LightningModule):
 
     def optimizer_step(
         self,
-        epoch,
-        batch_idx,
-        optimizer,
-        optimizer_idx,
-        optimizer_closure,
-        on_tpu,
-        using_native_amp,
-        using_lbfgs,
-    ):
+        epoch: int,
+        batch_idx: int,
+        optimizer: Union[Optimizer, LightningOptimizer],
+        optimizer_closure: Optional[Callable[[], Any]] = None,
+    ) -> None:
         # update params
         optimizer.step(closure=optimizer_closure)
         # manually warm up lr without a scheduler
