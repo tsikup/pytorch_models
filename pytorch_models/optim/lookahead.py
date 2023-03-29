@@ -19,13 +19,13 @@ class Lookahead(Optimizer):
         self.defaults = optimizer.defaults
         self.defaults.update(defaults)
         # super(Lookahead, self).__init__(optimizer.param_groups, optimizer.defaults)
-        
+
         self.state = defaultdict(dict)
         # manually add our defaults to the param groups
         for name, default in defaults.items():
             for group in self.param_groups:
                 group.setdefault(name, default)
-                
+
         self._optimizer_step_pre_hooks: Dict[int, Callable] = OrderedDict()
         self._optimizer_step_post_hooks: Dict[int, Callable] = OrderedDict()
 

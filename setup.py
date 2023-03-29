@@ -1,6 +1,10 @@
 import sys
 from setuptools import setup
 
+EXTRA_REQUIREMENTS = {
+    "graphs": ["networkx", "dgl", "histocartography"],
+}
+
 setup(
     name="pytorch_models",
     version="0.1.0",
@@ -20,13 +24,13 @@ setup(
         "pytorch_models.models.segmentation.deeplab",
         "pytorch_models.models.ssl_features",
         "pytorch_models.models.classification",
-        "pytorch_models.data_helpers",
     ],
     url="https://github.com/tsikup/pytorch_models",
     license="MIT",
     author="Nikos Tsiknakis",
     author_email="tsiknakisn@gmail.com",
     description=" A collection of pytorch models and utility methods that I use for any deep-learning project. ",
+    extras_require=EXTRA_REQUIREMENTS,
     install_requires=[
         "dotmap",
         "natsort",
@@ -47,12 +51,9 @@ setup(
         "Ranger21",
         "timm",
         "pytorch-lightning-bolts",
-        "networkx",
-        "dgl",
         "topk",
         "albumentations",
         "stainlib",
-        "histocartography",
         "wholeslidedata",
         "shapely",
     ]
