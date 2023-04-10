@@ -1,3 +1,7 @@
+from typing import Union
+
+import lightning as L
+import torch.nn as nn
 from torch.nn import init
 
 
@@ -62,15 +66,19 @@ def weights_init_orthogonal(m, init_bias=False):
         init.constant_(m.bias.data, 0.0)
 
 
-def init_weights(net, init_type="normal", init_bias=False):
+def init_weights(
+    net: Union[nn.Module, L.LightningModule], init_type="normal", init_bias=False
+):
+    if init_bias:
+        raise NotImplementedError("init_bias is not implemented yet")
     if init_type == "normal":
-        net.apply(weights_init_normal, init_bias)
+        net.apply(weights_init_normal)
     elif init_type == "xavier":
-        net.apply(weights_init_xavier, init_bias)
+        net.apply(weights_init_xavier)
     elif init_type == "kaiming":
-        net.apply(weights_init_kaiming, init_bias)
+        net.apply(weights_init_kaiming)
     elif init_type == "orthogonal":
-        net.apply(weights_init_orthogonal, init_bias)
+        net.apply(weights_init_orthogonal)
     else:
         raise NotImplementedError(
             "initialization method [%s] is not implemented" % init_type
