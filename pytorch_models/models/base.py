@@ -25,8 +25,16 @@ from torch.optim import (
     RAdam,
     SparseAdam,
 )
-from torch.optim.lr_scheduler import *
-from torch.optim.lr_scheduler import OneCycleLR
+from torch.optim.lr_scheduler import (
+    OneCycleLR,
+    ReduceLROnPlateau,
+    StepLR,
+    MultiStepLR,
+    ExponentialLR,
+    CosineAnnealingLR,
+    CyclicLR,
+)
+
 
 # TODO: inference sliding window
 #  https://github.com/YtongXie/CoTr/blob/main/CoTr_package/CoTr/network_architecture/neural_network.py
@@ -130,7 +138,7 @@ class BaseModel(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = self._get_optimizer()
-        if self.config.trainer.lr_enable:
+        if self.config.trainer.lr_scheduler is not None:
             scheduler = self._get_scheduler(optimizer)
             return [optimizer], [scheduler]
         else:
@@ -273,93 +281,29 @@ class BaseModel(L.LightningModule):
         return optimizer
 
     def _get_scheduler(self, optimizer, scheduler_name=None):
-        SUPPORTED_SCHEDULERS = [
-            "plateau",
-            "step",
-            "multistep",
-            "exp",
-            "cosineannealing",
-            "cosineannealingwarmuprestarts",
-            "cyclic",
-            "onecycle",
-        ]
+        SUPPORTED_SCHEDULERS = {
+            "plateau": (ReduceLROnPlateau, "epoch"),
+            "step": (StepLR, "epoch"),
+            "multistep": (MultiStepLR, "epoch"),
+            "exp": (ExponentialLR, "epoch"),
+            "cosineannealing": (CosineAnnealingLR, "step"),
+            "cosineannealingwarmuprestarts": (CosineAnnealingWarmupRestarts, "step"),
+            "cyclic": (CyclicLR, "step"),
+            "onecycle": (OneCycleLR, "step"),
+        }
 
         if scheduler_name is None:
-            scheduler_name = self.config.trainer.lr_schedule.lower()
+            scheduler_name = self.config.trainer.lr_scheduler.lower()
 
-        assert scheduler_name in SUPPORTED_SCHEDULERS, (
+        assert scheduler_name in SUPPORTED_SCHEDULERS.keys(), (
             f"Unsupported Scheduler: {scheduler_name}\n"
-            f"Supported Schedulers: {SUPPORTED_SCHEDULERS}"
+            f"Supported Schedulers: {list(SUPPORTED_SCHEDULERS.keys())}"
         )
 
-        if scheduler_name == "plateau":
-            lr_scheduler = ReduceLROnPlateau(
-                optimizer,
-                min_lr=self.config.trainer.min_learning_rate,
-                factor=self.config.trainer.lr_factor,
-                patience=self.config.trainer.lr_patience,
-            )
-            interval = "epoch"
-        elif scheduler_name == "step":
-            lr_scheduler = StepLR(
-                optimizer,
-                step_size=self.config.trainer.lr_step_epoch,
-                gamma=self.config.trainer.lr_factor,
-            )
-            interval = "epoch"
-        elif scheduler_name == "multistep":
-            lr_scheduler = MultiStepLR(
-                optimizer,
-                milestones=self.config.trainer.lr_multistep_milestones,
-                gamma=self.config.trainer.lr_factor,
-            )
-            interval = "epoch"
-        elif scheduler_name == "exp":
-            lr_scheduler = ExponentialLR(
-                optimizer,
-                gamma=self.config.trainer.lr_gamma,
-            )
-            interval = "epoch"
-        elif scheduler_name == "cosineannealing":
-            lr_scheduler = CosineAnnealingLR(
-                optimizer,
-                T_max=self.config.trainer.lr_cosine_first_cycle_step_size,
-                eta_min=self.config.trainer.min_learning_rate,
-            )
-            interval = "step"
-        elif scheduler_name == "cosineannealingwarmuprestarts":
-            lr_scheduler = CosineAnnealingWarmupRestarts(
-                optimizer,
-                first_cycle_steps=self.config.trainer.lr_cosine_first_cycle_step_size,
-                cycle_mult=self.config.trainer.lr_cosine_cycle_mult,
-                max_lr=self.config.trainer.learning_rate,
-                min_lr=self.config.trainer.min_learning_rate,
-                warmup_steps=self.config.trainer.lr_warmup_period,
-                gamma=self.config.trainer.lr_cosine_max_lr_gamma,
-            )
-            interval = "step"
-        elif scheduler_name == "cyclic":
-            lr_scheduler = CyclicLR(
-                optimizer,
-                base_lr=self.learning_rate,
-                max_lr=self.config.trainer.max_learning_rate,
-                step_size_up=self.config.trainer.lr_cyclic_step_size_up,
-                mode=self.config.trainer.lr_cyclic_mode,
-                gamma=self.config.trainer.lr_cyclic_gamma,
-                cycle_momentum=self.config.trainer.lr_cyclic_cycle_momentum,
-            )
-            interval = "step"
-        elif scheduler_name == "onecycle":
-            lr_scheduler = OneCycleLR(
-                optimizer,
-                max_lr=self.config.trainer.max_learning_rate,
-                anneal_strategy=self.trainer.one_cycle_anneal_strategy,
-            )
-            interval = "step"
-        else:
-            raise ValueError(
-                "LRScheduler not implemented in my code, please select one of the implemented lr schedulers or include yours in BaseModel."
-            )
+        lr_scheduler, interval = SUPPORTED_SCHEDULERS[scheduler_name]
+        lr_scheduler = lr_scheduler(
+            optimizer, **self.config.trainer.lr_scheduler_params
+        )
 
         lr_scheduler = {"scheduler": lr_scheduler, "interval": interval, "frequency": 1}
 
