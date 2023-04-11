@@ -297,6 +297,7 @@ class BaseModel(L.LightningModule):
                 optimizer,
                 min_lr=self.config.trainer.min_learning_rate,
                 factor=self.config.trainer.lr_factor,
+                patience=self.config.trainer.lr_patience,
             )
             interval = "epoch"
         elif scheduler_name == "step":
