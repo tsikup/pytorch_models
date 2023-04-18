@@ -62,7 +62,7 @@ class BaseModel(L.LightningModule):
         self.dim = self.config.model.input_shape
 
         # Hyperparameters
-        self.learning_rate = self.config.trainer.learning_rate
+        self.learning_rate = self.config.trainer.optimizer_params.learning_rate
         self.batch_size = self.config.trainer.batch_size
 
         # Get Loss
@@ -196,13 +196,11 @@ class BaseModel(L.LightningModule):
         if self.config.trainer.optimizer.lower() == "sgd":
             optimizer = SGD(
                 self.parameters(),
-                lr=self.learning_rate,
                 **self.config.trainer.optimizer_params,
             )
         elif self.config.trainer.optimizer.lower() == "ranger":
             optimizer = Ranger21(
                 self.parameters(),
-                lr=self.learning_rate,
                 num_epochs=self.config.trainer.epochs,
                 num_batches_per_epoch=self.config.trainer.num_batches_per_epoch,
                 **OPTIM_ARGS["ranger"],
@@ -211,7 +209,6 @@ class BaseModel(L.LightningModule):
         else:
             optimizer = SUPPORTED_OPTIMIZERS[self.config.trainer.optimizer.lower()](
                 self.parameters(),
-                lr=self.learning_rate,
                 **self.config.trainer.optimizer_params,
             )
 
