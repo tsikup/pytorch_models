@@ -62,7 +62,7 @@ class BaseModel(L.LightningModule):
         self.dim = self.config.model.input_shape
 
         # Hyperparameters
-        self.learning_rate = self.config.trainer.optimizer_params.learning_rate
+        self.learning_rate = self.config.trainer.optimizer_params.lr
         self.batch_size = self.config.trainer.batch_size
 
         # Get Loss
