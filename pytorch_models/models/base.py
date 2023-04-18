@@ -6,12 +6,14 @@ import torch
 from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
 from dotmap import DotMap
 from lightning.pytorch.core.optimizer import LightningOptimizer
+from torch_optimizer import AdaBound, SWATS, DiffGrad, AggMo, Apollo
+
 from pytorch_models.losses.losses import get_loss
 from pytorch_models.optim.lookahead import Lookahead
 from pytorch_models.optim.utils import get_warmup_factor
 from pytorch_models.utils.metrics.metrics import get_metrics
 from ranger21 import Ranger21
-from timm.optim import AdamP
+from timm.optim import AdamP, AdaBelief
 from torch.optim import (
     ASGD,
     SGD,
@@ -158,14 +160,15 @@ class BaseModel(L.LightningModule):
             "asgd": ASGD,
             "nadam": NAdam,
             "sparseadam": SparseAdam,
+            "adabound": AdaBound,
+            "swats": SWATS,
+            "diffgrad": DiffGrad,
+            "aggmo": AggMo,
+            "adabelief": AdaBelief,
+            "apollo": Apollo,
         }
 
         OPTIM_ARGS = {
-            "adam": {
-                "weight_decay": 0
-                if self.config.trainer.weight_decay == "default"
-                else self.config.trainer.weight_decay
-            },
             "ranger": {
                 "weight_decay": 1e-4
                 if self.config.trainer.weight_decay == "default"
@@ -182,53 +185,7 @@ class BaseModel(L.LightningModule):
                 "use_warmup": False,
                 "num_warmup_iterations": None,
                 "warmdown_active": True,
-            },
-            "adamp": {
-                "weight_decay": 0
-                if self.config.trainer.weight_decay == "default"
-                else self.config.trainer.weight_decay
-            },
-            "radam": {
-                "weight_decay": 0
-                if self.config.trainer.weight_decay == "default"
-                else self.config.trainer.weight_decay
-            },
-            "adagrad": {
-                "weight_decay": 0
-                if self.config.trainer.weight_decay == "default"
-                else self.config.trainer.weight_decay
-            },
-            "adadelta": {
-                "weight_decay": 0
-                if self.config.trainer.weight_decay == "default"
-                else self.config.trainer.weight_decay
-            },
-            "adamax": {
-                "weight_decay": 0
-                if self.config.trainer.weight_decay == "default"
-                else self.config.trainer.weight_decay
-            },
-            "adamw": {
-                "weight_decay": 0.01
-                if self.config.trainer.weight_decay == "default"
-                else self.config.trainer.weight_decay
-            },
-            "sgd": {
-                "weight_decay": 0
-                if self.config.trainer.weight_decay == "default"
-                else self.config.trainer.weight_decay
-            },
-            "asgd": {
-                "weight_decay": 0
-                if self.config.trainer.weight_decay == "default"
-                else self.config.trainer.weight_decay
-            },
-            "nadam": {
-                "weight_decay": 0
-                if self.config.trainer.weight_decay == "default"
-                else self.config.trainer.weight_decay
-            },
-            "sparseadam": {},
+            }
         }
 
         assert self.config.trainer.optimizer.lower() in SUPPORTED_OPTIMIZERS.keys(), (
@@ -240,9 +197,7 @@ class BaseModel(L.LightningModule):
             optimizer = SGD(
                 self.parameters(),
                 lr=self.learning_rate,
-                momentum=self.config.trainer.sgd_momentum,
-                nesterov=self.config.trainer.sgd_nesterov,
-                **OPTIM_ARGS[self.config.trainer.optimizer.lower()],
+                **self.config.trainer.optimizer_params,
             )
         elif self.config.trainer.optimizer.lower() == "ranger":
             optimizer = Ranger21(
@@ -251,12 +206,13 @@ class BaseModel(L.LightningModule):
                 num_epochs=self.config.trainer.epochs,
                 num_batches_per_epoch=self.config.trainer.num_batches_per_epoch,
                 **OPTIM_ARGS["ranger"],
+                **self.config.trainer.optimizer_params,
             )
         else:
             optimizer = SUPPORTED_OPTIMIZERS[self.config.trainer.optimizer.lower()](
                 self.parameters(),
                 lr=self.learning_rate,
-                **OPTIM_ARGS[self.config.trainer.optimizer.lower()],
+                **self.config.trainer.optimizer_params,
             )
 
         if self.config.trainer.lookahead:
