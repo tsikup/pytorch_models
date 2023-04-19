@@ -136,7 +136,7 @@ class CLAM_SB(nn.Module):
 
         if self.linear_feature:
             if self.multires_aggregation is not None:
-                if self.multires_aggregation["feature"] == "concat":
+                if self.multires_aggregation["features"] == "concat":
                     _size = size[0] / 2
                 else:
                     _size = size[0]
