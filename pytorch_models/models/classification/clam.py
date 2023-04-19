@@ -132,6 +132,7 @@ class CLAM_SB(nn.Module):
             self.instance_loss_on_gpu = False
         else:
             self.instance_loss_fn = nn.CrossEntropyLoss()
+            self.instance_loss_on_gpu = True
 
         assert self.attention_depth is not None and self.classifier_depth is not None
 
