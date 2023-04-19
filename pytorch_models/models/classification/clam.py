@@ -114,7 +114,7 @@ class CLAM_SB(nn.Module):
         classifier_depth: Union[List[int], int] = 1,
     ):
         super(CLAM_SB, self).__init__()
-        
+
         if size is None:
             size = [384, 256, 128]
         assert isinstance(size, list), "Please give the size array as a list"
@@ -173,14 +173,19 @@ class CLAM_SB(nn.Module):
             self.classifier_size = [2 * l for l in self.classifier_size]
             self.classifier_size.append(last_layer)
 
-        if self.multires_aggregation["features"] == "bilinear":
+        if (
+            self.multires_aggregation is not None
+            and self.multires_aggregation["features"] == "bilinear"
+        ):
             raise NotImplementedError
             # self.bilinear = nn.Bilinear(size[0], size[0], size[1], bias=False)
             # https://github.com/mahmoodlab/PathomicFusion/blob/master/fusion.py#L6
 
-        if self.multires_aggregation["features"] == "dualattention":
+        if (
+            self.multires_aggregation is not None
+            and self.multires_aggregation["features"] == "dualattention"
+        ):
             raise NotImplementedError
-            # self.
 
         self.attention_net = self._create_attention_model(
             size, dropout, gate, n_classes=1
