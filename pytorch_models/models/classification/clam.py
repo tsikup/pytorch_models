@@ -464,7 +464,7 @@ class CLAM_SB(nn.Module):
             Y_hat = torch.topk(logits, 1, dim=1)[1]
             Y_prob = F.softmax(logits, dim=1)
             if instance_eval:
-                pass
+                raise NotImplementedError("Instance evaluation not implemented yet.")
             else:
                 results_dict = {}
             if return_features:
