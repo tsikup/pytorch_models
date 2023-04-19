@@ -523,8 +523,9 @@ class CLAM_PL(BaseMILModel):
         instance_loss: str = "ce",
         instance_loss_weight: float = 0.3,
         subtyping: bool = False,
-        multires_aggregation=None,
         multibranch=False,
+        multires_aggregation=None,
+        linear_feature: bool = False,
         attention_depth=None,
         classifier_depth=None,
     ):
@@ -541,6 +542,7 @@ class CLAM_PL(BaseMILModel):
         self.multibranch = multibranch
         self.attention_depth = attention_depth
         self.classifier_depth = classifier_depth
+        self.linear_feature = linear_feature
 
         if not self.multibranch:
             self.model = CLAM_SB(
@@ -551,7 +553,7 @@ class CLAM_PL(BaseMILModel):
                 n_classes=self.n_classes,
                 instance_loss_fn=instance_loss,
                 subtyping=self.subtyping,
-                linear_feature=False,
+                linear_feature=self.linear_feature,
                 multires_aggregation=self.multires_aggregation,
                 attention_depth=self.attention_depth,
                 classifier_depth=self.classifier_depth,
