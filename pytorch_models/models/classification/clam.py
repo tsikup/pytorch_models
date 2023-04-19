@@ -114,6 +114,7 @@ class CLAM_SB(nn.Module):
         classifier_depth: Union[List[int], int] = 1,
     ):
         super(CLAM_SB, self).__init__()
+        
         if size is None:
             size = [384, 256, 128]
         assert isinstance(size, list), "Please give the size array as a list"
@@ -137,7 +138,7 @@ class CLAM_SB(nn.Module):
         if self.linear_feature:
             if self.multires_aggregation is not None:
                 if self.multires_aggregation["features"] == "concat":
-                    _size = size[0] / 2
+                    _size = int(size[0] / 2)
                 else:
                     _size = size[0]
                 self.linear_target = nn.Linear(_size, _size)
