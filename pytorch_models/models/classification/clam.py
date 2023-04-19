@@ -135,8 +135,12 @@ class CLAM_SB(nn.Module):
         assert self.attention_depth is not None and self.classifier_depth is not None
 
         if self.linear_feature:
-            self.linear_target = nn.Linear(size[0], size[0])
-            self.linear_context = nn.Linear(size[0], size[0])
+            if self.multires_aggregation["feature"] == "concat":
+                _size = size[0] / 2
+            else:
+                _size = size[0]
+            self.linear_target = nn.Linear(_size, _size)
+            self.linear_context = nn.Linear(_size, _size)
 
         if isinstance(self.classifier_depth, int):
             self.classifier_size = [size[self.classifier_depth]]
