@@ -144,8 +144,42 @@ class CLAM_SB(nn.Module):
                     _size = size[0]
                 self.linear_target = nn.Linear(_size, _size)
                 self.linear_context = nn.Linear(_size, _size)
+
+                if self.linear_feature == "relu":
+                    self.linear_target = nn.Sequential(self.linear_target, nn.ReLU())
+                    self.linear_context = nn.Sequential(self.linear_context, nn.ReLU())
+                elif self.linear_feature == "leakyrelu":
+                    self.linear_target = nn.Sequential(
+                        self.linear_target, nn.LeakyReLU()
+                    )
+                    self.linear_context = nn.Sequential(
+                        self.linear_context, nn.LeakyReLU()
+                    )
+                elif self.linear_feature == "prelu":
+                    self.linear_target = nn.Sequential(
+                        self.linear_target, nn.PReLU(num_parameters=_size)
+                    )
+                    self.linear_context = nn.Sequential(
+                        self.linear_context, nn.PReLU(num_parameters=_size)
+                    )
+                elif self.linear_feature == "gelu":
+                    self.linear_target = nn.Sequential(self.linear_target, nn.GELU())
+                    self.linear_context = nn.Sequential(self.linear_context, nn.GELU())
             else:
                 self.linear_target = nn.Linear(size[0], size[0])
+
+                if self.linear_feature == "relu":
+                    self.linear_target = nn.Sequential(self.linear_target, nn.ReLU())
+                elif self.linear_feature == "leakyrelu":
+                    self.linear_target = nn.Sequential(
+                        self.linear_target, nn.LeakyReLU()
+                    )
+                elif self.linear_feature == "prelu":
+                    self.linear_target = nn.Sequential(
+                        self.linear_target, nn.PReLU(num_parameters=size[0])
+                    )
+                elif self.linear_feature == "gelu":
+                    self.linear_target = nn.Sequential(self.linear_target, nn.GELU())
 
         if isinstance(self.classifier_depth, int):
             self.classifier_size = [size[self.classifier_depth]]
