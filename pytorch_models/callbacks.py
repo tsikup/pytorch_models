@@ -5,6 +5,7 @@ from lightning.pytorch.callbacks import (
     LearningRateMonitor,
     ModelCheckpoint,
     StochasticWeightAveraging,
+    RichProgressBar,
 )
 from lightning.pytorch.loggers import CometLogger
 
@@ -44,6 +45,7 @@ def get_callbacks(config):
         callbacks.append(StochasticWeightAveraging(swa_lrs=1e-2))
     if config.comet.enable:
         callbacks.append(CometMLCustomLogs())
+    callbacks.append(RichProgressBar())
     return callbacks
 
 
