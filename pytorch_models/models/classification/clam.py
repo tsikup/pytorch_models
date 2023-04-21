@@ -10,8 +10,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from topk.svm import SmoothTop1SVM
 from pytorch_models.models.base import BaseMILModel
-from pytorch_models.models.ssl_features.vit import ViT
-from pytorch_models.models.ssl_features.resnets import ResNet50_SimCLR
 
 
 def initialize_weights(module):
@@ -667,3 +665,34 @@ class CLAM_PL(BaseMILModel):
             return_features=return_features,
             attention_only=attention_only,
         )
+
+
+if __name__ == "__main__":
+    # create test data and model
+    n_features = 384
+    n_classes = 1
+    n_samples = 10
+
+    features = torch.rand(n_samples, n_features)
+
+    model = CLAM_SB(
+        gate=True,
+        size=[384, 256, 128],
+        dropout=True,
+        k_sample=8,
+        n_classes=2,
+        instance_loss_fn="svm",
+        subtyping=False,
+        linear_feature=False,
+        multires_aggregation=None,
+        attention_depth=1,
+        classifier_depth=1,
+    )
+
+    # test forward pass
+    logits, preds, _, A, _ = model.forward(features)
+    print(
+        logits.shape,
+        preds.shape,
+        A.shape,
+    )
