@@ -1,7 +1,8 @@
 from typing import Union
 
+import torch
+from pytorch_models.models.base import BaseModel
 from torch import nn
-from ..base import BaseModel
 
 ACTIVATION_FUNCTIONS = {
     "relu": nn.ReLU,
@@ -108,3 +109,144 @@ class NNClassifierPL(BaseModel):
 
     def _forward(self, x):
         return self.model.forward(x)
+
+
+class NNClassifierMILPL(BaseModel):
+    def __init__(
+        self,
+        config,
+        size,
+        n_classes,
+        dropout=True,
+        aggregation="mean",
+        agg_level="probs",
+        top_k=0,
+    ):
+        if n_classes == 2:
+            n_classes = 1
+        super(NNClassifierMILPL, self).__init__(
+            config=config, n_classes=n_classes, in_channels=size[0]
+        )
+
+        self.top_k = top_k
+        self.agg_level = agg_level
+        self.aggregation = aggregation
+
+        self.model = NNClassifier(
+            in_features=size,
+            n_classes=n_classes,
+            depth=None,
+            dropout=dropout,
+            activation="relu",
+        )
+
+    def aggregate_predictions(self, preds: torch.Tensor):
+        if self.top_k != 0:
+            preds = preds.topk(self.top_k, dim=0, largest=self.top_k > 0, sorted=False)[
+                0
+            ]  # view(1,)
+
+        if self.aggregation == "mean":
+            pred = preds.mean(dim=0, keepdim=False)
+        elif self.aggregation == "max":
+            pred = preds.max(dim=0, keepdim=False)
+        elif self.aggregation == "min":
+            pred = preds.min(dim=0, keepdim=False)
+        elif isinstance(self.aggregation, float):
+            pred = preds.kthvalue(
+                int(preds.shape[0] * self.aggregation), dim=0, keepdim=False
+            )
+        else:
+            raise NotImplementedError(
+                f"Aggregation {self.aggregation} not implemented."
+            )
+        return pred
+
+    def _forward(self, x):
+        return self.model.forward(x)
+
+    def calculate_preds(self, logits):
+        # Sigmoid or Softmax activation
+        if self.n_classes == 1:
+            preds = logits.sigmoid()
+        else:
+            preds = torch.nn.functional.softmax(logits, dim=1)
+
+        return preds
+
+    def forward(self, batch):
+        # Batch
+        features, target = batch
+
+        # Prediction
+        logits = self._forward(features)
+
+        if self.agg_level == "logits":
+            # Aggregation
+            logits = self.aggregate_predictions(logits)
+
+            # Loss (on logits)
+            loss = self.loss.forward(logits, target.float())
+
+            # Prediction
+            preds = self.calculate_preds(logits)
+        else:
+            # Loss (on logits)
+            loss = 0.0
+
+            # Prediction
+            preds = self.calculate_preds(logits)
+
+            # Aggregation
+            preds = self.aggregate_predictions(preds)
+
+        return {"target": target, "preds": preds, "loss": loss}
+
+    def training_step(self, batch, batch_idx):
+        raise NotImplementedError(
+            "Training is not implemented for NNClassifierMIL models."
+        )
+
+    def validation_step(self, batch, batch_idx):
+        output = self.forward(batch)
+        target, preds, loss = (
+            output["target"],
+            output["preds"],
+            output["loss"],
+        )
+        self._log_metrics(preds, target, loss, "val")
+        return {"val_loss": loss, "val_preds": preds, "val_target": target}
+
+    def test_step(self, batch, batch_idx):
+        output = self.forward(batch)
+
+        target, preds, loss = (
+            output["target"],
+            output["preds"],
+            output["loss"],
+        )
+
+        self._log_metrics(preds, target, loss, "test")
+
+        return {"test_loss": loss, "test_preds": preds, "test_target": target}
+
+
+if __name__ == "__main__":
+    # create test data and model
+    batch = 32
+    n_features = 384
+    n_classes = 1
+
+    features = torch.rand(batch, n_features)
+
+    model = NNClassifier(
+        in_features=n_features,
+        n_classes=n_classes,
+        depth=3,
+        activation="relu",
+        dropout=True,
+    )
+
+    # test forward
+    logits = model.forward(features)
+    print(logits.shape)
