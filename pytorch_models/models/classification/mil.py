@@ -6,8 +6,8 @@ from typing import List, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from pytorch_models.models.base import BaseMILModel
+from pytorch_models.utils.tensor import aggregate_features
 
 
 def initialize_weights(module):
@@ -28,7 +28,7 @@ class PredMIL(nn.Module):
         dropout=False,
         n_classes=1,
         aggregate: Union[str, float] = "mean",
-        agg_level="probs",
+        agg_level="preds",
         top_k: int = None,
     ):
         super(PredMIL, self).__init__()
@@ -399,19 +399,28 @@ class MIL_PL(BaseMILModel):
         config,
         n_classes,
         size=[1024, 512],
+        mil_type="pred",
+        agg_level="preds",
         aggregates: Union[str, List[str]] = "mean",
         top_k: int = 1,
         dropout=False,
     ):
-        super(MIL_PL, self).__init__(config, n_classes=n_classes, in_features=size[0])
         self.size = size
         self.top_k = top_k
         self.dropout = dropout
         self.aggregates = aggregates
+        self.mil_type = mil_type
+        self.agg_level = agg_level
+        super(MIL_PL, self).__init__(config, n_classes=n_classes, in_features=size[0])
+
+        assert self.mil_type in ["pred", "features", "clam_mil"]
+
+        if self.mil_type == "pred":
+            assert self.agg_level in ["preds", "logits"]
 
         self.loss = nn.CrossEntropyLoss()
 
-        if self.aggregates == "clam_mil" or "clam_mil" in self.aggregates:
+        if self.mil_type == "clam_mil":
             print("Using CLAM's MIL model")
             if self.n_classes in [1, 2]:
                 self.model = MIL_fc(
@@ -424,7 +433,7 @@ class MIL_PL(BaseMILModel):
                     n_classes=self.n_classes,
                     top_k=self.top_k,
                 )
-        else:
+        elif self.mil_type == "features":
             self.model = FeatureMIL(
                 size=self.size,
                 dropout=self.dropout,
@@ -432,8 +441,17 @@ class MIL_PL(BaseMILModel):
                 aggregates=self.aggregates,
                 top_k=self.top_k,
             )
+        elif self.mil_type == "pred":
+            self.model = PredMIL(
+                size=self.size,
+                dropout=self.dropout,
+                n_classes=self.n_classes,
+                aggregate=self.aggregates,
+                agg_level=self.agg_level,
+                top_k=self.top_k,
+            )
 
-    def forward(self, batch):
+    def forward(self, batch: dict[str, torch.Tensor]):
         if (
             "top_k" in self.aggregates
             or "clam" in self.aggregates
@@ -456,20 +474,22 @@ class MIL_PL(BaseMILModel):
                 "loss": loss,
             }
         else:
-            return super(MIL_PL, self).forward_shared(batch)
+            return super(MIL_PL, self).forward(batch)
 
-    def _forward(self, x):
-        return self.model.forward(x)
+    def _forward(self, features):
+        h = [features[key] for key in features]
+        h = aggregate_features(h, method=self.multires_aggregation)
+        return self.model.forward(h)
 
 
 if __name__ == "__main__":
     # create test data and model
-    batch = 32
-    n_features = 384
-    n_classes = 1
-    n_samples = 100
+    _batch = 32
+    _n_features = 384
+    _n_classes = 1
+    _n_samples = 100
 
-    features = [torch.rand(n_samples, n_features) for _ in range(batch)]
+    _features = [torch.rand(_n_samples, _n_features) for _ in range(_batch)]
 
     for aggregate in ["mean", "max", "min", 0.25, 0.5, 0.75]:
         model = PredMIL(
@@ -482,9 +502,9 @@ if __name__ == "__main__":
         )
 
         # test forward pass
-        logits, probs, results_dict = model.forward(features, return_features=True)
+        _logits, _probs, _results_dict = model.forward(_features, return_features=True)
         print("------------------------")
         print("aggregate:", aggregate)
-        print(logits.shape)
-        print(probs.shape)
-        print(results_dict["features"].shape)
+        print(_logits.shape)
+        print(_probs.shape)
+        print(_results_dict["features"].shape)

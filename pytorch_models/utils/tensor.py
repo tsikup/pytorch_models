@@ -1,9 +1,43 @@
-from typing import List
+from typing import List, Tuple, Union
 import numpy as np
 import torch
 import torchvision.transforms.functional as F
 import torchvision.transforms as T
 from torch import Tensor
+
+
+def aggregate_features(
+    features: Union[List[torch.Tensor], Tuple[torch.Tensor]], method=None
+):
+    if method == "concat":
+        h = torch.cat(features, dim=1)
+    elif method == "average" or method == "mean":
+        h = torch.dstack(features)
+        h = torch.mean(h, dim=-1)
+    elif method == "max":
+        h = torch.dstack(features)
+        h = torch.max(h, dim=-1)
+    elif method == "min":
+        h = torch.dstack(features)
+        h = torch.min(h, dim=-1)
+    elif method == "mul":
+        if len(features) == 2:
+            h = torch.mul(*features)
+        else:
+            h = torch.stack(features, dim=-1)
+            h = torch.prod(h, dim=-1)
+    elif method == "add":
+        if len(features) == 2:
+            h = torch.add(*features)
+        else:
+            h = torch.stack(features, dim=-1)
+            h = torch.sum(h, dim=-1)
+    elif method == "sum":
+        h = torch.dstack(features)
+        return torch.sum(h, dim=-1)
+    else:
+        h = features[0]
+    return h
 
 
 def tensor_to_image(tensor: torch.Tensor, keepdim: bool = False) -> "np.ndarray":

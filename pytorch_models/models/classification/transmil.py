@@ -1,11 +1,10 @@
-from typing import Tuple
-
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from nystrom_attention import NystromAttention
 from pytorch_models.models.base import BaseMILModel
+from pytorch_models.utils.tensor import aggregate_features
 
 
 class TransLayer(nn.Module):
@@ -46,7 +45,7 @@ class PPEG(nn.Module):
 
 
 class TransMIL(nn.Module):
-    def __init__(self, n_classes, size=(1024, 512), aggregate_method=None):
+    def __init__(self, n_classes, size=(1024, 512)):
         super(TransMIL, self).__init__()
         self.pos_layer = PPEG(dim=size[1])
         self._fc1 = nn.Sequential(nn.Linear(size[0], size[1]), nn.ReLU())
@@ -56,37 +55,8 @@ class TransMIL(nn.Module):
         self.layer2 = TransLayer(dim=size[1])
         self.norm = nn.LayerNorm(size[1])
         self._fc2 = nn.Linear(size[1], self.n_classes)
-        self.aggregate_method = aggregate_method
-        self.multiresolution = self.aggregate_method is not None
 
-    def _aggregate_multires_features(self, h: Tuple[torch.Tensor], method):
-        if not isinstance(h, tuple):
-            h = tuple(h)
-        if method == "concat":
-            h = torch.cat(h, dim=1)
-        elif method == "average" or method == "mean":
-            h = torch.dstack(h)
-            h = torch.mean(h, dim=-1)
-        elif method == "max":
-            h = torch.dstack(h)
-            h = torch.max(h, dim=-1)
-        elif method == "min":
-            h = torch.dstack(h)
-            h = torch.min(h, dim=-1)
-        elif method == "mul":
-            h = torch.mul(*h)
-        elif method == "add":
-            h = torch.add(*h)
-        return h
-
-    def forward(self, data):
-        h = [h.float() for h in data]  # list of [B, n, 1024] if size[0] == 1024
-
-        if self.multiresolution:
-            h = self._aggregate_multires_features(h, self.aggregate_method)
-        else:
-            h = h[0]
-
+    def forward(self, h: torch.Tensor):  # list of [B, n, 1024] if size[0] == 1024
         device = h.device
 
         h = self._fc1(h)  # [B, n, 512] if size[0] == 512
@@ -130,19 +100,15 @@ class TransMIL_Features_PL(BaseMILModel):
         config,
         n_classes,
         size=(1024, 512),
-        aggregate_method=None,
+        multires_aggregation=None,
     ):
+        self.multires_aggregation = multires_aggregation
         super(TransMIL_Features_PL, self).__init__(config, n_classes=n_classes)
-
-        self.model = TransMIL(
-            n_classes=n_classes, size=size, aggregate_method=aggregate_method
-        )
+        self.model = TransMIL(n_classes=n_classes, size=size)
 
     def forward(self, batch, is_predict=False):
         # Batch
         features, target = batch
-
-        features = [features[key] for key in features.keys()]
 
         # Prediction
         results_dict = self._forward(data=features)
@@ -168,7 +134,9 @@ class TransMIL_Features_PL(BaseMILModel):
         self,
         data,
     ):
-        return self.model(data=data)
+        h = [data[key] for key in data]
+        h = aggregate_features(h, method=self.multires_aggregation)
+        return self.model(data=h)
 
 
 if __name__ == "__main__":

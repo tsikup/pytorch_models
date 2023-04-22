@@ -378,6 +378,9 @@ class CLAM_SB(nn.Module):
             else:
                 h = torch.stack(features, dim=-1)
                 h = torch.sum(h, dim=-1)
+        elif method == "sum":
+            h = torch.dstack(features)
+            return torch.sum(h, dim=-1)
         else:
             h = features[0]
         return h
