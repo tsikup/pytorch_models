@@ -559,6 +559,178 @@ class CLAM_SB(nn.Module):
             return logits, Y_prob, Y_hat, A_raw, results_dict
 
 
+class CLAM_MB(CLAM_SB):
+    """
+    args:
+        gate: whether to use gated attention network
+        size_arg: config for network size
+        dropout: whether to use dropout
+        k_sample: number of positive/neg patches to sample for instance-level training
+        dropout: whether to use dropout (p = 0.25)
+        n_classes: number of classes
+        instance_loss_fn: loss function to supervise instance-level training
+        subtyping: whether it's a subtyping problem
+        multires_aggregation: whether to use multiresolution aggregation
+        attention_depth: attention module starting size as an index of the size array
+        classifier_depth: classification module starting size as an index of the size array
+    """
+
+    def __init__(
+        self,
+        gate=True,
+        size=None,
+        dropout=True,
+        k_sample=8,
+        n_classes=2,
+        instance_loss_fn="svm",
+        subtyping=False,
+        linear_feature=False,
+        multires_aggregation=None,
+        attention_depth: Union[List[int], int] = 1,
+        classifier_depth: Union[List[int], int] = 1,
+    ):
+        super(CLAM_MB, self).__init__(
+            gate,
+            size,
+            dropout,
+            k_sample,
+            n_classes,
+            instance_loss_fn,
+            subtyping,
+            linear_feature,
+            multires_aggregation,
+            attention_depth,
+            classifier_depth,
+        )
+
+        self.attention_net = None
+        del self.attention_net
+        self.attention_context_net = None
+        del self.attention_context_net
+        self.classifiers = None
+        del self.classifiers
+
+        self.attention_net = self._create_attention_model(
+            size, dropout, gate, n_classes=n_classes
+        )
+
+        if (
+            self.multires_aggregation is not None
+            and self.multires_aggregation["attention"] is not None
+        ):
+            self.attention_context_net = self._create_attention_model(
+                size, dropout, gate, n_classes=n_classes
+            )
+
+        # use an indepdent linear layer to predict each class
+        if len(self.classifier_size) > 1:
+            bag_classifiers = []  # use an indepdent linear layer to predict each class
+            for _ in range(n_classes):
+                _classifier = []
+                for idx, _ in enumerate(self.classifier_size[:-1]):
+                    _classifier.append(
+                        nn.Linear(
+                            self.classifier_size[idx], self.classifier_size[idx + 1]
+                        )
+                    )
+                _classifier.append(nn.Linear(self.classifier_size[-1], 1))
+                bag_classifiers.append(nn.Sequential(*_classifier))
+        else:
+            bag_classifiers = [
+                nn.Linear(self.classifier_size[0], 1) for _ in range(n_classes)
+            ]
+
+        self.classifiers = nn.ModuleList(bag_classifiers)
+        initialize_weights(self)
+
+    def forward(
+        self,
+        h,
+        h_context=None,
+        label=None,
+        instance_eval=False,
+        return_features=False,
+        attention_only=False,
+    ):
+        device = h.device
+
+        if self.linear_feature:
+            h = self.linear_target(h)
+            if self.multires_aggregation is not None:
+                h_context = self.linear_context(h_context)
+
+        if self.multires_aggregation is not None:
+            assert (
+                h_context is not None
+            ), "Multiresolution is enabled.. h_context features should not be None."
+            raise NotImplementedError
+        else:
+            A, h = self.attention_net(h)
+            A = torch.transpose(A, 1, 0)  # KxN
+
+        if (
+            self.multires_aggregation is not None
+            and self.multires_aggregation["attention"] == "late"
+        ):
+            raise NotImplementedError
+        else:
+            if attention_only:
+                return A
+            A_raw = A
+            A = F.softmax(A, dim=1)  # softmax over N
+
+            if instance_eval:
+                total_inst_loss = 0.0
+                all_preds = []
+                all_targets = []
+                inst_labels = F.one_hot(
+                    label.to(torch.int64), num_classes=self.n_classes
+                ).squeeze()  # binarize label
+
+                for i in range(len(self.instance_classifiers)):
+                    inst_label = inst_labels[i].item()
+                    classifier = self.instance_classifiers[i]
+                    if inst_label == 1:  # in-the-class:
+                        instance_loss, preds, targets = self.inst_eval(
+                            A[i], h, classifier
+                        )
+                        all_preds.extend(preds.cpu().numpy())
+                        all_targets.extend(targets.cpu().numpy())
+                    else:  # out-of-the-class
+                        if self.subtyping:
+                            instance_loss, preds, targets = self.inst_eval_out(
+                                A[i], h, classifier
+                            )
+                            all_preds.extend(preds.cpu().numpy())
+                            all_targets.extend(targets.cpu().numpy())
+                        else:
+                            continue
+                    total_inst_loss += instance_loss
+
+                if self.subtyping:
+                    total_inst_loss /= len(self.instance_classifiers)
+
+            M = torch.mm(A, h)
+            logits = torch.empty(1, self.n_classes).float().to(device)
+            for c in range(self.n_classes):
+                logits[0, c] = self.classifiers[c](M[c])
+            Y_hat = torch.topk(logits, 1, dim=1)[1]
+            Y_prob = F.softmax(logits, dim=1)
+            if instance_eval:
+                results_dict = {
+                    "instance_loss": total_inst_loss,
+                    "inst_labels": np.array(all_targets),
+                    "inst_preds": np.array(all_preds),
+                }
+            else:
+                results_dict = {}
+            if return_features:
+                results_dict.update({"features": M})
+            else:
+                results_dict.update({"features": None})
+            return logits, Y_prob, Y_hat, A_raw, results_dict
+
+
 class CLAM_PL(BaseMILModel):
     def __init__(
         self,
@@ -608,7 +780,19 @@ class CLAM_PL(BaseMILModel):
                 classifier_depth=self.classifier_depth,
             )
         else:
-            raise NotImplementedError("Multibranch CLAM is not implemented yet.")
+            self.model = CLAM_MB(
+                gate=self.gate,
+                size=self.size,
+                dropout=self.dropout,
+                k_sample=self.k_sample,
+                n_classes=self.n_classes,
+                instance_loss_fn=instance_loss,
+                subtyping=self.subtyping,
+                linear_feature=self.linear_feature,
+                multires_aggregation=self.multires_aggregation,
+                attention_depth=self.attention_depth,
+                classifier_depth=self.classifier_depth,
+            )
 
     def forward(self, batch, is_predict=False):
         # Batch
