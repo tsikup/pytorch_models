@@ -12,29 +12,26 @@ def aggregate_features(
     if method == "concat":
         h = torch.cat(features, dim=-1)
     elif method == "average" or method == "mean":
-        h = torch.dstack(features)
+        h = torch.stack(features, dim=-1)
         h = torch.mean(h, dim=-1)
     elif method == "max":
-        h = torch.dstack(features)
-        h = torch.max(h, dim=-1)
+        h = torch.stack(features, dim=-1)
+        h = torch.max(h, dim=-1)[0]
     elif method == "min":
-        h = torch.dstack(features)
-        h = torch.min(h, dim=-1)
+        h = torch.stack(features, dim=-1)
+        h = torch.min(h, dim=-1)[0]
     elif method == "mul":
         if len(features) == 2:
             h = torch.mul(*features)
         else:
             h = torch.stack(features, dim=-1)
             h = torch.prod(h, dim=-1)
-    elif method == "add":
+    elif method == "add" or method == "sum":
         if len(features) == 2:
             h = torch.add(*features)
         else:
             h = torch.stack(features, dim=-1)
             h = torch.sum(h, dim=-1)
-    elif method == "sum":
-        h = torch.dstack(features)
-        return torch.sum(h, dim=-1)
     else:
         h = features[0]
     return h

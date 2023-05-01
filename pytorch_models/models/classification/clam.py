@@ -356,15 +356,15 @@ class CLAM_SB(nn.Module):
                 raise Exception(
                     "Attention vectors cannot be integrated with concat method."
                 )
-            h = torch.cat(features, dim=1)
+            h = torch.cat(features, dim=-1)
         elif method == "average" or method == "mean":
-            h = torch.dstack(features)
+            h = torch.stack(features, dim=-1)
             h = torch.mean(h, dim=-1)
         elif method == "max":
-            h = torch.dstack(features)
+            h = torch.stack(features, dim=-1)
             h = torch.max(h, dim=-1)
         elif method == "min":
-            h = torch.dstack(features)
+            h = torch.stack(features, dim=-1)
             h = torch.min(h, dim=-1)
         elif method == "mul":
             if len(features) == 2:
