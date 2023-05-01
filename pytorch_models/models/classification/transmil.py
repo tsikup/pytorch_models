@@ -136,7 +136,7 @@ class TransMIL_Features_PL(BaseMILModel):
     ):
         h = [data[key] for key in data]
         h = aggregate_features(h, method=self.multires_aggregation)
-        return self.model(data=h)
+        return self.model(h)
 
 
 if __name__ == "__main__":
