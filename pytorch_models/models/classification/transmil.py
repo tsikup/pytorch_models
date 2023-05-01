@@ -1,3 +1,5 @@
+from typing import Dict
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -59,7 +61,7 @@ class TransMIL(nn.Module):
     def forward(self, h: torch.Tensor):  # list of [B, n, 1024] if size[0] == 1024
         device = h.device
 
-        h = self._fc1(h)  # [B, n, 512] if size[0] == 512
+        h = self._fc1(h)  # [B, n, 512] if size[1] == 512
 
         # ---->pad
         H = h.shape[1]
@@ -130,10 +132,7 @@ class TransMIL_Features_PL(BaseMILModel):
             "loss": loss,
         }
 
-    def _forward(
-        self,
-        data,
-    ):
+    def _forward(self, data: Dict[str, torch.Tensor]):
         h = [data[key] for key in data]
         h = aggregate_features(h, method=self.multires_aggregation)
         return self.model(h)

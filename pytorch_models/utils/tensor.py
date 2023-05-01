@@ -10,7 +10,7 @@ def aggregate_features(
     features: Union[List[torch.Tensor], Tuple[torch.Tensor]], method=None
 ):
     if method == "concat":
-        h = torch.cat(features, dim=1)
+        h = torch.cat(features, dim=-1)
     elif method == "average" or method == "mean":
         h = torch.dstack(features)
         h = torch.mean(h, dim=-1)
