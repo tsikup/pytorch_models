@@ -414,7 +414,7 @@ class MIL_PL(BaseMILModel):
         self.agg_level = agg_level
         self.multires_aggregation = multires_aggregation
         super(MIL_PL, self).__init__(config, n_classes=n_classes)
-        
+
         if n_classes == 2:
             self.n_classes = 1
             n_classes = 1
@@ -499,6 +499,39 @@ class MIL_PL(BaseMILModel):
             h = aggregate_features(h, method=self.multires_aggregation)
             _data.append(h)
         return self.model.forward(_data)
+
+    def _log_metrics(self, preds, target, loss, mode):
+        on_step = False if mode != "train" else True
+        # https://github.com/Lightning-AI/lightning/issues/13210
+        sync_dist = self.sync_dist and (
+            mode == "val" or mode == "test" or mode == "eval"
+        )
+        if mode == "val":
+            metrics = self.val_metrics
+        elif mode == "train":
+            metrics = self.train_metrics
+        elif mode == "test":
+            metrics = self.test_metrics
+
+        self._compute_metrics(preds, target, mode)
+        self.log_dict(
+            metrics,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=False,
+            logger=True,
+            batch_size=self.batch_size,
+        )
+        self.log(
+            f"{mode}_loss",
+            loss,
+            on_step=on_step,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+            sync_dist=sync_dist,
+            batch_size=self.batch_size,
+        )
 
 
 if __name__ == "__main__":
