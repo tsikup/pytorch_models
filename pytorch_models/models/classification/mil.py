@@ -414,6 +414,10 @@ class MIL_PL(BaseMILModel):
         self.agg_level = agg_level
         self.multires_aggregation = multires_aggregation
         super(MIL_PL, self).__init__(config, n_classes=n_classes)
+        
+        if n_classes == 2:
+            self.n_classes = 1
+            n_classes = 1
 
         assert self.mil_type in ["pred", "features", "clam_mil"]
 
@@ -465,7 +469,6 @@ class MIL_PL(BaseMILModel):
             logits, preds, _, _, results_dict = self._forward(features)
             # Loss (on logits)
             loss = self.loss.forward(logits, target.squeeze())
-            # loss = self.loss.forward(logits, target.float())
 
             preds = preds[:, 1]
 
@@ -476,7 +479,18 @@ class MIL_PL(BaseMILModel):
                 "loss": loss,
             }
         else:
-            return super(MIL_PL, self).forward(batch)
+            # Batch
+            features, target = batch
+            # Prediction
+            logits, preds = self._forward(features)
+            # Loss (on logits)
+            loss = self.loss.forward(logits.float(), target.float())
+
+            return {
+                "target": target,
+                "preds": preds,
+                "loss": loss,
+            }
 
     def _forward(self, features):
         _data = []
