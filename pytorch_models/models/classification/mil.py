@@ -411,7 +411,7 @@ class MIL_PL(BaseMILModel):
         self.aggregates = aggregates
         self.mil_type = mil_type
         self.agg_level = agg_level
-        super(MIL_PL, self).__init__(config, n_classes=n_classes, in_features=size[0])
+        super(MIL_PL, self).__init__(config, n_classes=n_classes)
 
         assert self.mil_type in ["pred", "features", "clam_mil"]
 
