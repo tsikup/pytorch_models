@@ -150,7 +150,7 @@ class DSMIL_PL(BaseMILModel):
 
         self.model = DSMIL(
             size=size,
-            n_classes=n_classes,
+            n_classes=self.n_classes,
             dropout=dropout,
             nonlinear=nonlinear,
             passing_v=passing_v,
