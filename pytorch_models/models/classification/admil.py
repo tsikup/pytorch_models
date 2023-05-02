@@ -119,8 +119,10 @@ class AttentionDeepMIL_PL(BaseMILModel):
         }
 
     def _forward(self, features):
-        h = [features[key] for key in features]
-        h = aggregate_features(h, method=self.multires_aggregation)
+        h: List[torch.Tensor] = [features[key] for key in features]
+        h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
+        if len(h.shape) == 3:
+            h = h.squeeze(dim=0)
         return self.model.forward(h)
 
 
