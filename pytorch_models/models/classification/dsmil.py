@@ -133,12 +133,12 @@ class DSMIL_PL(BaseMILModel):
     def __init__(
         self,
         config,
-        size: Union[List[int], Tuple[int]] = (384, 128),
+        size: Union[List[int], Tuple[int, int]] = (384, 128),
         n_classes=1,
         dropout=0.0,
         nonlinear=True,
         passing_v=False,
-        multires_aggregation="concat",
+        multires_aggregation: Union[None, str] = None,
     ):
         self.multires_aggregation = multires_aggregation
         super(DSMIL_PL, self).__init__(config, n_classes=n_classes)
@@ -156,6 +156,20 @@ class DSMIL_PL(BaseMILModel):
             passing_v=passing_v,
         )
 
+    def forward(self, batch, is_predict=False):
+        # Batch
+        features, target = batch
+        # Prediction
+        classes, logits, A, B = self._forward(features)
+        # Loss (on logits)
+        loss = self.loss.forward(logits, target.float())
+        # Sigmoid or Softmax activation
+        if self.n_classes == 1:
+            preds = logits.sigmoid()
+        else:
+            preds = torch.nn.functional.softmax(logits, dim=1)
+        return {"target": target, "preds": preds, "loss": loss}
+
     def _forward(self, features: Dict[str, torch.Tensor]):
         h = [features[key] for key in features]
         h = aggregate_features(h, method=self.multires_aggregation)
@@ -163,15 +177,44 @@ class DSMIL_PL(BaseMILModel):
 
 
 if __name__ == "__main__":
+    # from my_utils.config import process_config
+    # import numpy as np
+
+    # config = process_config(
+    #     "/Users/tsik/Documents/github/PhD/tp53-he-prediction/assets/test_config.yml",
+    #     name="test",
+    #     output_dir="/tmp",
+    #     fold=0,
+    #     mkdirs=False,
+    #     config_copy=False,
+    # )
+    # model = DSMIL_PL(
+    #     config,
+    #     size=(384, 128),
+    #     n_classes=1,
+    #     dropout=0.0,
+    #     nonlinear=True,
+    #     passing_v=False,
+    #     multires_aggregation=None,
+    # )
+    #
+    # x = {
+    #     "features": torch.rand(100, 384),
+    #     # "features_context": torch.rand(100, 384),
+    # }
+    # y = torch.randint(0, 2, (1, 1))
+    # model.forward((x, y))
+
     # create test data and model
     x = [torch.rand(100, 384) for _ in range(2)]
+    x = aggregate_features(x, method="mean")
+
     model = DSMIL(
-        size=[384 * 2, 128],
+        size=[384, 128],
         n_classes=1,
         dropout=0.0,
         nonlinear=True,
         passing_v=False,
-        multires_aggregation="concat",
     )
 
     # run model
