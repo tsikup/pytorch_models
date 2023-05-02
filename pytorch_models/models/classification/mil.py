@@ -479,9 +479,12 @@ class MIL_PL(BaseMILModel):
             return super(MIL_PL, self).forward(batch)
 
     def _forward(self, features):
-        h = [features[key] for key in features]
-        h = aggregate_features(h, method=self.multires_aggregation)
-        return self.model.forward(h)
+        _data = []
+        for data in features:
+            h = [data[key] for key in data]
+            h = aggregate_features(h, method=self.multires_aggregation)
+            _data.append(h)
+        return self.model.forward(_data)
 
 
 if __name__ == "__main__":
