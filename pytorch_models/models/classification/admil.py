@@ -112,10 +112,12 @@ class AttentionDeepMIL_PL(BaseMILModel):
 
         # Prediction
         logits, preds, _ = self._forward(features)
+        logits = logits.squeeze(dim=1)
+        target = target.squeeze(dim=1)
 
         loss = None
         if not is_predict:
-            loss = self.loss.forward(logits, target.squeeze(dim=1))
+            loss = self.loss.forward(logits.float(), target.float())
 
         return {
             "target": target,
