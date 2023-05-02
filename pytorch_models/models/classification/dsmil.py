@@ -171,8 +171,10 @@ class DSMIL_PL(BaseMILModel):
         return {"target": target, "preds": preds, "loss": loss}
 
     def _forward(self, features: Dict[str, torch.Tensor]):
-        h = [features[key] for key in features]
-        h = aggregate_features(h, method=self.multires_aggregation)
+        h: List[torch.Tensor] = [features[key] for key in features]
+        h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
+        if len(h.shape) == 3:
+            h = h.squeeze(dim=0)
         return self.model(h)
 
 
