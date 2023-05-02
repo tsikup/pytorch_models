@@ -85,6 +85,7 @@ class AttentionDeepMIL_PL(BaseMILModel):
         n_classes: int,
         size: Union[List[int], Tuple[int, int]] = None,
         gated: bool = True,
+        multires_aggregation: Union[None, str] = None,
     ):
         super(AttentionDeepMIL_PL, self).__init__(config, n_classes=n_classes)
 
@@ -92,6 +93,8 @@ class AttentionDeepMIL_PL(BaseMILModel):
         assert self.n_classes > 0, "n_classes must be greater than 0"
         if self.n_classes == 2:
             self.n_classes = 1
+
+        self.multires_aggregation = multires_aggregation
 
         if gated:
             self.model = GatedAttention(L=size[0], D=size[1], n_classes=self.n_classes)
