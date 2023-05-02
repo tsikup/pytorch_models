@@ -876,7 +876,7 @@ class CLAM_PL(BaseMILModel):
         logits, preds, _, _, results_dict = self._forward(
             h=features["features"],
             h_context=features["features_context"]
-            if self.multires_aggregation is not None and "features_context" in features
+            if (self.multires_aggregation is not None or self.bilinear_dict["type"] == "bilinear_attention") and "features_context" in features
             else None,
             label=target,
             instance_eval=self.instance_eval and not is_predict,
