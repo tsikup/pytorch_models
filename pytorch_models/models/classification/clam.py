@@ -24,6 +24,64 @@ def initialize_weights(module):
             nn.init.constant_(m.bias, 0)
 
 
+class BilinearNet(nn.Module):
+    def __init__(self, L=1024, D=1024, dropout=False, activation=None):
+        super(BilinearNet, self).__init__()
+        # https://github.com/mahmoodlab/PathomicFusion/blob/master/fusion.py
+        self.bilinear = nn.Bilinear(L, L, D)
+
+        self.act = nn.Identity()
+        self.dropout = nn.Identity()
+
+        if activation == "relu":
+            self.act = nn.ReLU()
+        elif activation == "leakyrelu":
+            self.act = nn.LeakyReLU()
+        elif activation == "prelu":
+            self.act = nn.PReLU(num_parameters=D)
+        elif activation == "gelu":
+            self.act = nn.GELU()
+
+        if dropout:
+            self.dropout = nn.Dropout(p=0.25)
+
+    def forward(self, x, y):
+        return self.dropout(self.act(self.bilinear(x, y)))
+
+
+class BilinearAttentionNet(nn.Module):
+    """
+    Multiresolution Bilinear Attention Network
+    """
+
+    def __init__(
+        self, L=1024, D=1024, dropout=False, activation=False, return_context=False
+    ):
+        super(BilinearAttentionNet, self).__init__()
+
+        self.return_context = return_context
+
+        self.linear_h1 = nn.Sequential(nn.Linear(L, D), nn.ReLU())
+        self.linear_h2 = nn.Sequential(nn.Linear(L, D), nn.ReLU())
+
+        self.bilinear1 = BilinearNet(L, D, dropout, activation)
+        if return_context:
+            self.bilinear2 = BilinearNet(L, D, dropout, activation)
+
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, h1, h2):
+        h1, h2 = self.linear_h1(h1), self.linear_h2(h2)
+        if self.return_context:
+            z1, z2 = self.bilinear1(h1, h2), self.bilinear2(h1, h2)
+            o1, o2 = self.sigmoid(z1) * h1, self.sigmoid(z2) * h2
+            return o1, o2
+        else:
+            z = self.bilinear1(h1, h2)
+            o = self.sigmoid(z) * h1
+            return o, None
+
+
 class Attn_Net(nn.Module):
     """
     Attention Network without Gating (2 fc layers)
@@ -107,6 +165,7 @@ class CLAM_SB(nn.Module):
         instance_loss_fn="svm",
         subtyping=False,
         linear_feature=False,
+        bilinear=None,
         multires_aggregation=None,
         attention_depth: Union[List[int], int] = 1,
         classifier_depth: Union[List[int], int] = 1,
@@ -121,9 +180,17 @@ class CLAM_SB(nn.Module):
         self.n_classes = n_classes
         self.subtyping = subtyping
         self.multires_aggregation = multires_aggregation
+        self.use_multires = (
+            self.multires_aggregation is not None
+            and self.multires_aggregation["features"] is not None
+            and self.multires_aggregation["features"] != "bilinear"
+        )
         self.attention_depth = attention_depth
         self.classifier_depth = classifier_depth
         self.linear_feature = linear_feature
+        self.use_bilinear = bilinear["type"] == "bilinear"
+        self.use_bilinear_attention = bilinear["type"] == "bilinear_attention"
+        self.bilinear_config = bilinear
 
         if instance_loss_fn == "svm":
             self.instance_loss_fn = SmoothTop1SVM(n_classes=n_classes)
@@ -135,7 +202,7 @@ class CLAM_SB(nn.Module):
         assert self.attention_depth is not None and self.classifier_depth is not None
 
         if self.linear_feature:
-            if self.multires_aggregation is not None:
+            if self.use_multires:
                 if self.multires_aggregation["features"] == "concat":
                     _size = int(size[0] / 2)
                 else:
@@ -179,6 +246,23 @@ class CLAM_SB(nn.Module):
                 elif self.linear_feature == "gelu":
                     self.linear_target = nn.Sequential(self.linear_target, nn.GELU())
 
+        if self.use_bilinear:
+            assert self.multires_aggregation["features"] == "bilinear"
+            self.bilinear = BilinearNet(
+                L=self.bilinear_config["size"][0],
+                D=self.bilinear_config["size"][1],
+                dropout=dropout,
+                activation=self.bilinear_config["activation"],
+            )
+        elif self.use_bilinear_attention:
+            self.bilinear = BilinearAttentionNet(
+                L=self.bilinear_config["size"][0],
+                D=self.bilinear_config["size"][1],
+                dropout=dropout,
+                activation=self.bilinear_config["activation"],
+                return_context=self.use_multires,
+            )
+
         if isinstance(self.classifier_depth, int):
             self.classifier_size = [size[self.classifier_depth]]
         elif isinstance(self.classifier_depth, list):
@@ -198,7 +282,7 @@ class CLAM_SB(nn.Module):
         ), "Mismatch between attention module output feature size and classifiers' input feature size"
 
         if (
-            self.multires_aggregation is not None
+            self.use_multires
             and self.multires_aggregation["attention"] == "late"
             and self.multires_aggregation["features"] == "concat"
         ):
@@ -206,28 +290,11 @@ class CLAM_SB(nn.Module):
             self.classifier_size = [2 * l for l in self.classifier_size]
             self.classifier_size.append(last_layer)
 
-        if (
-            self.multires_aggregation is not None
-            and self.multires_aggregation["features"] == "bilinear"
-        ):
-            raise NotImplementedError
-            # self.bilinear = nn.Bilinear(size[0], size[0], size[1], bias=False)
-            # https://github.com/mahmoodlab/PathomicFusion/blob/master/fusion.py#L6
-
-        if (
-            self.multires_aggregation is not None
-            and self.multires_aggregation["features"] == "dualattention"
-        ):
-            raise NotImplementedError
-
         self.attention_net = self._create_attention_model(
             size, dropout, gate, n_classes=1
         )
 
-        if (
-            self.multires_aggregation is not None
-            and self.multires_aggregation["attention"] is not None
-        ):
+        if self.use_multires and self.multires_aggregation["attention"] is not None:
             self.attention_context_net = self._create_attention_model(
                 size, dropout, gate, n_classes=1
             )
@@ -393,10 +460,15 @@ class CLAM_SB(nn.Module):
     ):
         if self.linear_feature:
             h = self.linear_target(h)
-            if self.multires_aggregation is not None:
+            if self.use_multires:
                 h_context = self.linear_context(h_context)
 
-        if self.multires_aggregation is not None:
+        if self.use_bilinear:
+            h = self.bilinear(h, h_context)
+        elif self.use_bilinear_attention:
+            h, h_context = self.bilinear(h, h_context)
+
+        if self.use_multires:
             assert (
                 h_context is not None
             ), "Multiresolution is enabled.. h_context features should not be None."
@@ -430,10 +502,7 @@ class CLAM_SB(nn.Module):
             A, h = self.attention_net(h)
             A = torch.transpose(A, 1, 0)  # KxN
 
-        if (
-            self.multires_aggregation is not None
-            and self.multires_aggregation["attention"] == "late"
-        ):
+        if self.use_multires and self.multires_aggregation["attention"] == "late":
             if attention_only:
                 return A, A_context
             A_raw = A
@@ -582,6 +651,7 @@ class CLAM_MB(CLAM_SB):
         instance_loss_fn="svm",
         subtyping=False,
         linear_feature=False,
+        bilinear=None,
         multires_aggregation=None,
         attention_depth: Union[List[int], int] = 1,
         classifier_depth: Union[List[int], int] = 1,
@@ -595,6 +665,7 @@ class CLAM_MB(CLAM_SB):
             instance_loss_fn,
             subtyping,
             linear_feature,
+            bilinear,
             multires_aggregation,
             attention_depth,
             classifier_depth,
@@ -653,10 +724,15 @@ class CLAM_MB(CLAM_SB):
 
         if self.linear_feature:
             h = self.linear_target(h)
-            if self.multires_aggregation is not None:
+            if self.use_multires:
                 h_context = self.linear_context(h_context)
 
-        if self.multires_aggregation is not None:
+        if self.use_bilinear:
+            h = self.bilinear(h, h_context)
+        elif self.use_bilinear_attention:
+            h, h_context = self.bilinear(h, h_context)
+
+        if self.use_multires:
             assert (
                 h_context is not None
             ), "Multiresolution is enabled.. h_context features should not be None."
@@ -665,10 +741,7 @@ class CLAM_MB(CLAM_SB):
             A, h = self.attention_net(h)
             A = torch.transpose(A, 1, 0)  # KxN
 
-        if (
-            self.multires_aggregation is not None
-            and self.multires_aggregation["attention"] == "late"
-        ):
+        if self.use_multires and self.multires_aggregation["attention"] == "late":
             raise NotImplementedError
         else:
             if attention_only:
@@ -742,6 +815,7 @@ class CLAM_PL(BaseMILModel):
         instance_loss_weight: float = 0.3,
         subtyping: bool = False,
         multibranch=False,
+        bilinear=None,
         multires_aggregation=None,
         linear_feature: bool = False,
         attention_depth=None,
@@ -761,6 +835,7 @@ class CLAM_PL(BaseMILModel):
         self.attention_depth = attention_depth
         self.classifier_depth = classifier_depth
         self.linear_feature = linear_feature
+        self.bilinear_dict = bilinear
 
         if not self.multibranch:
             self.model = CLAM_SB(
@@ -772,6 +847,7 @@ class CLAM_PL(BaseMILModel):
                 instance_loss_fn=instance_loss,
                 subtyping=self.subtyping,
                 linear_feature=self.linear_feature,
+                bilinear=bilinear,
                 multires_aggregation=self.multires_aggregation,
                 attention_depth=self.attention_depth,
                 classifier_depth=self.classifier_depth,
@@ -785,6 +861,7 @@ class CLAM_PL(BaseMILModel):
                 n_classes=self.n_classes,
                 instance_loss_fn=instance_loss,
                 subtyping=self.subtyping,
+                bilinear=bilinear,
                 linear_feature=self.linear_feature,
                 multires_aggregation=self.multires_aggregation,
                 attention_depth=self.attention_depth,
@@ -868,15 +945,19 @@ if __name__ == "__main__":
         instance_loss_fn="svm",
         subtyping=False,
         linear_feature=False,
-        multires_aggregation=None,
+        bilinear={
+            "type": "bilinear_attention",
+            "size": [384, 384],
+            "activation": "relu",
+        },
+        multires_aggregation={
+            "features": "add",
+            "attention": None,
+        },
         attention_depth=1,
         classifier_depth=1,
     )
 
     # test forward pass
-    logits, preds, _, A, _ = model.forward(features)
-    print(
-        logits.shape,
-        preds.shape,
-        A.shape,
-    )
+    logits, preds, _, A, _ = model.forward(features, features, return_features=True)
+    print(logits.shape, preds.shape, A.shape)
