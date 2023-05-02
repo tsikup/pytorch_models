@@ -404,6 +404,7 @@ class MIL_PL(BaseMILModel):
         aggregates: Union[str, List[str]] = "mean",
         top_k: int = 1,
         dropout=False,
+        multires_aggregation=None,
     ):
         self.size = size
         self.top_k = top_k
@@ -411,6 +412,7 @@ class MIL_PL(BaseMILModel):
         self.aggregates = aggregates
         self.mil_type = mil_type
         self.agg_level = agg_level
+        self.multires_aggregation = multires_aggregation
         super(MIL_PL, self).__init__(config, n_classes=n_classes)
 
         assert self.mil_type in ["pred", "features", "clam_mil"]
