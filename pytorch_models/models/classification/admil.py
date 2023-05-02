@@ -15,17 +15,18 @@ from pytorch_models.utils.tensor import aggregate_features
 
 
 class Attention(nn.Module):
-    def __init__(self, L=384, D=128, n_classes=1):
+    def __init__(self, L=384, D=128, K=1, n_classes=1):
         super(Attention, self).__init__()
         self.L = L
         self.D = D
-        self.K = n_classes
+        self.K = K
+        self.n_classes = n_classes
 
         self.attention = nn.Sequential(
             nn.Linear(self.L, self.D), nn.Tanh(), nn.Linear(self.D, self.K)
         )
 
-        self.classifier = nn.Sequential(nn.Linear(self.L * self.K, 1), nn.Sigmoid())
+        self.classifier = nn.Linear(self.L * self.K, self.n_classes)
 
     def forward(self, H):
         A = self.attention(H)  # NxK
@@ -36,7 +37,7 @@ class Attention(nn.Module):
 
         logits = self.classifier(M)
 
-        if self.K == 1:
+        if self.n_classes == 1:
             Y_hat = torch.ge(torch.sigmoid(logits), 0.5).float()
         else:
             Y_hat = torch.topk(logits, 1, dim=1)[1].float()
@@ -45,11 +46,12 @@ class Attention(nn.Module):
 
 
 class GatedAttention(nn.Module):
-    def __init__(self, L=384, D=128, n_classes=1):
+    def __init__(self, L=384, D=128, K=1, n_classes=1):
         super(GatedAttention, self).__init__()
         self.L = L
         self.D = D
-        self.K = n_classes
+        self.K = K
+        self.n_classes = n_classes
 
         self.attention_V = nn.Sequential(nn.Linear(self.L, self.D), nn.Tanh())
 
@@ -57,7 +59,7 @@ class GatedAttention(nn.Module):
 
         self.attention_weights = nn.Linear(self.D, self.K)
 
-        self.classifier = nn.Sequential(nn.Linear(self.L * self.K, 1), nn.Sigmoid())
+        self.classifier = nn.Linear(self.L * self.K, self.n_classes)
 
     def forward(self, H):
         A_V = self.attention_V(H)  # NxD
@@ -70,7 +72,7 @@ class GatedAttention(nn.Module):
 
         logits = self.classifier(M)
 
-        if self.K == 1:
+        if self.n_classes == 1:
             Y_hat = torch.ge(torch.sigmoid(logits), 0.5).float()
         else:
             Y_hat = torch.topk(logits, 1, dim=1)[1].float()
@@ -84,6 +86,7 @@ class AttentionDeepMIL_PL(BaseMILModel):
         config: DotMap,
         n_classes: int,
         size: Union[List[int], Tuple[int, int]] = None,
+        K: int = 1,
         gated: bool = True,
         multires_aggregation: Union[None, str] = None,
     ):
@@ -97,9 +100,11 @@ class AttentionDeepMIL_PL(BaseMILModel):
         self.multires_aggregation = multires_aggregation
 
         if gated:
-            self.model = GatedAttention(L=size[0], D=size[1], n_classes=self.n_classes)
+            self.model = GatedAttention(
+                L=size[0], D=size[1], K=K, n_classes=self.n_classes
+            )
         else:
-            self.model = Attention(L=size[0], D=size[1], n_classes=self.n_classes)
+            self.model = Attention(L=size[0], D=size[1], K=K, n_classes=self.n_classes)
 
     def forward(self, batch, is_predict=False):
         # Batch
@@ -134,7 +139,7 @@ if __name__ == "__main__":
 
     features = torch.rand(n_samples, n_features)
 
-    model = GatedAttention(L=n_features, D=128, n_classes=n_classes)
+    model = GatedAttention(L=n_features, D=128, K=1, n_classes=n_classes)
 
     # test forward
     logits, preds, A = model.forward(features)
