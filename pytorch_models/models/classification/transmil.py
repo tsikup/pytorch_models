@@ -49,8 +49,23 @@ class PPEG(nn.Module):
 class TransMIL(nn.Module):
     def __init__(self, n_classes, size=(1024, 512)):
         super(TransMIL, self).__init__()
+
+        if len(size) > 2:
+            p_size = size[:-1]
+            size = size[-2:]
+        else:
+            p_size = size
+
+        assert p_size[-1] == size[0], "p_size[-1] != size[0]"
+
+        self._fc1 = nn.Sequential(
+            *[
+                nn.Sequential(nn.Linear(size[i], size[i + 1]), nn.ReLU())
+                for i in range(len(p_size) - 1)
+            ]
+        )
+
         self.pos_layer = PPEG(dim=size[1])
-        self._fc1 = nn.Sequential(nn.Linear(size[0], size[1]), nn.ReLU())
         self.cls_token = nn.Parameter(torch.randn(1, 1, size[1]))
         self.n_classes = n_classes
         self.layer1 = TransLayer(dim=size[1])
