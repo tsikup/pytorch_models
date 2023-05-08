@@ -132,6 +132,8 @@ class DSMIL(nn.Module):
         super(DSMIL, self).__init__()
         if len(size) > 2:
             self.feature_processor = FCLayer(size[:-1], nonlinear=nonlinear)
+        else:
+            self.feature_processor = nn.Identity()
         i_classifier = FCClassifier(size[-2], n_classes)
         b_classifier = BClassifier(
             size=size[-2:],
