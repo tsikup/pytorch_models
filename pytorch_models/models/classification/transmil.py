@@ -60,7 +60,7 @@ class TransMIL(nn.Module):
 
         self._fc1 = nn.Sequential(
             *[
-                nn.Sequential(nn.Linear(size[i], size[i + 1]), nn.ReLU())
+                nn.Sequential(nn.Linear(p_size[i], p_size[i + 1]), nn.ReLU())
                 for i in range(len(p_size) - 1)
             ]
         )
