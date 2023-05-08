@@ -13,8 +13,23 @@ from pytorch_models.utils.tensor import aggregate_features
 
 
 class FCLayer(nn.Module):
-    def __init__(self, in_size, out_size=1):
+    def __init__(self, size: List[int], nonlinear=False):
         super(FCLayer, self).__init__()
+        assert isinstance(size, list) and len(size) > 1
+        fc = []
+        for idx in range(len(size) - 1):
+            fc.append(nn.Sequential(nn.Linear(size[idx], size[idx + 1])))
+            if nonlinear:
+                fc.append(nn.ReLU())
+        self.fc = nn.Sequential(*fc)
+
+    def forward(self, feats):
+        return self.fc(feats)
+
+
+class FCClassifier(nn.Module):
+    def __init__(self, in_size, out_size=1):
+        super(FCClassifier, self).__init__()
         self.fc = nn.Sequential(nn.Linear(in_size, out_size))
 
     def forward(self, feats):
@@ -115,9 +130,11 @@ class DSMIL(nn.Module):
         passing_v=False,
     ):
         super(DSMIL, self).__init__()
-        i_classifier = FCLayer(size[0], n_classes)
+        if len(size) > 2:
+            self.feature_processor = FCLayer(size[:-1], nonlinear=nonlinear)
+        i_classifier = FCClassifier(size[-2], n_classes)
         b_classifier = BClassifier(
-            size=size,
+            size=size[-2:],
             output_class=n_classes,
             dropout_v=dropout,
             nonlinear=nonlinear,
@@ -126,7 +143,7 @@ class DSMIL(nn.Module):
         self.model = MILNet(i_classifier, b_classifier)
 
     def forward(self, features):
-        return self.model.forward(features)
+        return self.model.forward(self.feature_processor(features))
 
 
 class DSMIL_PL(BaseMILModel):
@@ -212,7 +229,7 @@ if __name__ == "__main__":
     x = aggregate_features(x, method="mean")
 
     model = DSMIL(
-        size=[384, 128],
+        size=[384, 192, 96],
         n_classes=1,
         dropout=0.0,
         nonlinear=True,
