@@ -327,7 +327,7 @@ class MI_Net_PL(BaseMILModel):
     def forward(self, batch, is_predict=False):
         raise NotImplementedError
         # Batch
-        features, target = batch
+        features, target = batch["features"], batch["labels"]
 
         # Prediction
         preds = self._forward(features)
@@ -342,6 +342,7 @@ class MI_Net_PL(BaseMILModel):
             "target": target,
             "preds": preds,
             "loss": loss,
+            "slide_name": batch["slide_name"],
         }
 
     def _forward(self, features):

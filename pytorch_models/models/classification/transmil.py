@@ -123,7 +123,7 @@ class TransMIL_Features_PL(BaseMILModel):
 
     def forward(self, batch, is_predict=False):
         # Batch
-        features, target = batch
+        features, target = batch["features"], batch["labels"]
 
         # Prediction
         results_dict = self._forward(data=features)
@@ -143,6 +143,7 @@ class TransMIL_Features_PL(BaseMILModel):
             "target": target,
             "preds": preds,
             "loss": loss,
+            "slide_name": batch["slide_name"],
         }
 
     def _forward(self, data: Dict[str, torch.Tensor]):

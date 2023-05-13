@@ -108,7 +108,7 @@ class AttentionDeepMIL_PL(BaseMILModel):
 
     def forward(self, batch, is_predict=False):
         # Batch
-        features, target = batch
+        features, target = batch["features"], batch["labels"]
 
         # Prediction
         logits, preds, _ = self._forward(features)
@@ -123,6 +123,7 @@ class AttentionDeepMIL_PL(BaseMILModel):
             "target": target,
             "preds": preds,
             "loss": loss,
+            "slide_name": batch["slide_name"],
         }
 
     def _forward(self, features):

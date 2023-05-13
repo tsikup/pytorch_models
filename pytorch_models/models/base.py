@@ -381,7 +381,7 @@ class BaseMILModel(BaseModel):
 
     def forward(self, batch, is_predict=False):
         # Batch
-        features, target = batch
+        features, target = batch["features"], batch["labels"]
         # Prediction
         logits = self._forward(features)
         # Loss (on logits)
@@ -391,7 +391,12 @@ class BaseMILModel(BaseModel):
             preds = logits.sigmoid()
         else:
             preds = torch.nn.functional.softmax(logits, dim=1)
-        return {"target": target, "preds": preds, "loss": loss}
+        return {
+            "target": target,
+            "preds": preds,
+            "loss": loss,
+            "slide_name": batch["slide_name"],
+        }
 
     def _forward(self, x):
         raise NotImplementedError
@@ -430,10 +435,8 @@ class BaseMILModel(BaseModel):
         return {"test_loss": loss, "test_preds": preds, "test_target": target}
 
     def predict_step(self, batch, batch_idx):
-        _, labels = batch
         output = self.forward(batch, is_predict=True)
-
-        return output["preds"], labels
+        return output["preds"], batch["labels"], batch["slide_name"]
 
 
 class EnsembleInferenceModel(BaseModel):

@@ -177,7 +177,7 @@ class DSMIL_PL(BaseMILModel):
 
     def forward(self, batch, is_predict=False):
         # Batch
-        features, target = batch
+        features, target = batch["features"], batch["labels"]
         # Prediction
         classes, logits, A, B = self._forward(features)
         # Loss (on logits)
@@ -187,7 +187,12 @@ class DSMIL_PL(BaseMILModel):
             preds = logits.sigmoid()
         else:
             preds = torch.nn.functional.softmax(logits, dim=1)
-        return {"target": target, "preds": preds, "loss": loss}
+        return {
+            "target": target,
+            "preds": preds,
+            "loss": loss,
+            "slide_name": batch["slide_name"],
+        }
 
     def _forward(self, features: Dict[str, torch.Tensor]):
         h: List[torch.Tensor] = [features[key] for key in features]

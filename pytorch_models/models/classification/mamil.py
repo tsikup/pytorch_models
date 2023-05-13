@@ -115,7 +115,7 @@ class MAMIL(BaseMILModel):
     def forward(self, batch, is_predict=False):
         raise NotImplementedError
         # Batch
-        features, target = batch
+        features, target = batch["features"], batch["labels"]
 
         # Prediction
         logits, a1, a2, a3 = self._forward(features)
@@ -132,6 +132,7 @@ class MAMIL(BaseMILModel):
             "target": target,
             "preds": preds,
             "loss": loss,
+            "slide_name": batch["slide_name"],
         }
 
     def _forward(self, features):

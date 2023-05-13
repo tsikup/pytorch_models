@@ -870,7 +870,7 @@ class CLAM_PL(BaseMILModel):
 
     def forward(self, batch, is_predict=False):
         # Batch
-        features, target = batch
+        features, target = batch["features"], batch["labels"]
 
         # Prediction
         logits, preds, _, _, results_dict = self._forward(
@@ -906,6 +906,7 @@ class CLAM_PL(BaseMILModel):
             "target": target,
             "preds": preds,
             "loss": loss,
+            "slide_name": batch["slide_name"],
         }
 
     def _forward(
