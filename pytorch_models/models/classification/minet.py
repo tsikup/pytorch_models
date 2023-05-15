@@ -342,7 +342,6 @@ class MINet_PL(BaseMILModel):
             )
 
     def forward(self, batch, is_predict=False):
-        raise NotImplementedError
         # Batch
         features, target = batch["features"], batch["labels"]
 

@@ -113,7 +113,6 @@ class MAMIL_PL(BaseMILModel):
         self.model = MultiAttentionMIL(self.n_classes, size, use_dropout=self.dropout)
 
     def forward(self, batch, is_predict=False):
-        raise NotImplementedError
         # Batch
         features, target = batch["features"], batch["labels"]
 
