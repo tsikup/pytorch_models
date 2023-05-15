@@ -1,11 +1,10 @@
 # https://github.com/mdsatria/MultiAttentionMIL
-from typing import Dict, List, Tuple, Union
+from typing import List, Tuple, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from dotmap import DotMap
-
 from pytorch_models.models.base import BaseMILModel
 from pytorch_models.utils.tensor import aggregate_features
 
@@ -18,13 +17,15 @@ class MultiAttentionMIL(nn.Module):
         self.num_classes = num_classes
         self.use_dropout = use_dropout
         self.n_dropout = n_dropout
-        self.num_features = size[0]
-        self.D = size[1]
+        self.D = size[-1]
 
         self.fc1 = nn.Sequential(
-            nn.Linear(self.num_features, self.D),
-            nn.ReLU(),
+            *[
+                nn.Sequential(nn.Linear(size[i], size[i + 1]), nn.ReLU())
+                for i in range(len(size) - 1)
+            ]
         )
+
         self.attention1 = nn.Sequential(
             nn.Linear(self.D, self.D), nn.Tanh(), nn.Linear(self.D, 1)
         )
@@ -102,7 +103,9 @@ class MAMIL_PL(BaseMILModel):
         multires_aggregation: Union[None, str] = None,
     ):
         super(MAMIL_PL, self).__init__(config, n_classes=n_classes)
-        assert len(size) == 2, "size must be a tuple of (n_features, layer_size)"
+        assert (
+            len(size) >= 2
+        ), "size must be a tuple of (n_features, layer1_size, layer2_size, ...)"
         assert self.n_classes > 0, "n_classes must be greater than 0"
         if self.n_classes == 2:
             self.n_classes = 1
@@ -146,10 +149,10 @@ if __name__ == "__main__":
     _data = torch.randn((1, 6000, 1024))
     _model = MultiAttentionMIL(
         num_classes=1,
-        size=(1024, 128),
+        size=(1024, 512, 128),
         use_dropout=True,
         n_dropout=0.4,
     )
-    print(_model.eval())
+    _model = _model.eval()
     _results = _model(_data)
     print(_results)

@@ -1,11 +1,9 @@
 # https://github.com/yanyongluan/MINNs
-from typing import Dict, List, Tuple, Union
+from typing import List, Tuple, Union
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from dotmap import DotMap
-
 from pytorch_models.models.base import BaseMILModel
 from pytorch_models.utils.tensor import aggregate_features
 
@@ -253,6 +251,19 @@ class MI_Net_RC(nn.Module):
             self.n_classes = 1
         self.pooling_mode = pooling_mode
 
+        if len(size) > 2:
+            p_size = size[:-1]
+            size = size[-2:]
+        else:
+            p_size = size
+
+        self.fc0 = nn.Sequential(
+            *[
+                nn.Sequential(nn.Linear(p_size[i], p_size[i + 1]), nn.ReLU())
+                for i in range(len(p_size) - 1)
+            ]
+        )
+
         self.fc1 = nn.Sequential(nn.Linear(size[0], size[1]), nn.ReLU())
         self.fc2 = nn.Sequential(nn.Linear(size[1], size[1]), nn.ReLU())
         self.fc3 = nn.Sequential(nn.Linear(size[1], size[1]), nn.ReLU())
@@ -269,7 +280,9 @@ class MI_Net_RC(nn.Module):
         self.act = nn.Sigmoid() if self.n_classes == 1 else nn.Softmax()
 
     def forward(self, x):
-        x1 = self.fc1(x)
+        x0 = self.fc0(x)
+
+        x1 = self.fc1(x0)
         x1 = self.dropout1(x1)
         output1 = self.rc1(x1)
 
@@ -336,7 +349,7 @@ class MINet_PL(BaseMILModel):
                 size=size, n_classes=self.n_classes, pooling_mode=self.pooling_mode
             )
         elif self.config.model.classifier == "minet_rc":
-            assert len(size) == 2, "size must be a list of 2 integers"
+            assert len(size) >= 2, "size must be a list of at least 2 integers"
             self.model = MI_Net_RC(
                 size=size, n_classes=self.n_classes, pooling_mode=self.pooling_mode
             )
@@ -373,6 +386,6 @@ if __name__ == "__main__":
     _data = torch.randn((1, 1000, 384))
     for model in [mi_NET, MI_Net, MI_Net_DS, MI_Net_RC]:
         _model = model()
-        print(_model.eval())
+        _model = _model.eval()
         _results = _model(_data)
         print(_results.shape)
