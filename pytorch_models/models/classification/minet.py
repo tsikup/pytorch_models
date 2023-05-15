@@ -110,12 +110,11 @@ class ScorePooling(nn.Module):
     def forward(self, x):
         x = self.fc(x)
         if self.C == 1:
-            output = self.sigmoid(x)
+            x = self.sigmoid(x)
         elif self.C > 2:
+            x = self.softmax(x)
             raise NotImplementedError
-            # output = self.softmax(x)
-        output = choice_pooling(x, self.pooling_mode)
-        return output
+        return choice_pooling(x, self.pooling_mode)
 
 
 class FeaturePooling(nn.Module):
