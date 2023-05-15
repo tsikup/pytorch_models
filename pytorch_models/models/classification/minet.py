@@ -320,22 +320,22 @@ class MINet_PL(BaseMILModel):
         self.pooling_mode = pooling_mode
         self.multires_aggregation = multires_aggregation
 
-        if self.config.model == "minet_naive":
+        if self.config.model.classifier == "minet_naive":
             assert len(size) == 4, "size must be a list of 4 integers"
             self.model = mi_NET(
                 size=size, n_classes=self.n_classes, pooling_mode=self.pooling_mode
             )
-        elif self.config.model == "minet":
+        elif self.config.model.classifier == "minet":
             assert len(size) == 4, "size must be a list of 4 integers"
             self.model = MI_Net(
                 size=size, n_classes=self.n_classes, pooling_mode=self.pooling_mode
             )
-        elif self.config.model == "minet_ds":
+        elif self.config.model.classifier == "minet_ds":
             assert len(size) == 4, "size must be a list of 4 integers"
             self.model = MI_Net_DS(
                 size=size, n_classes=self.n_classes, pooling_mode=self.pooling_mode
             )
-        elif self.config.model == "minet_rc":
+        elif self.config.model.classifier == "minet_rc":
             assert len(size) == 2, "size must be a list of 2 integers"
             self.model = MI_Net_RC(
                 size=size, n_classes=self.n_classes, pooling_mode=self.pooling_mode
