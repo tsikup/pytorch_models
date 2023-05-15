@@ -100,13 +100,22 @@ def choice_pooling(x, pooling_mode):
 class ScorePooling(nn.Module):
     def __init__(self, D, C, pooling_mode="max"):
         super(ScorePooling, self).__init__()
+        self.D = D
+        self.C = C
         self.fc = nn.Linear(D, C)
-        self.sigmoid = nn.Sigmoid()
+        if C == 1:
+            self.sigmoid = nn.Sigmoid()
+        elif C > 2:
+            self.softmax = nn.Softmax()
         self.pooling_mode = pooling_mode
 
     def forward(self, x):
         x = self.fc(x)
-        x = self.sigmoid(x)
+        if self.C == 1:
+            output = self.sigmoid(x)
+        elif self.C > 2:
+            raise NotImplementedError
+            # output = self.softmax(x)
         output = choice_pooling(x, self.pooling_mode)
         return output
 
@@ -114,14 +123,22 @@ class ScorePooling(nn.Module):
 class FeaturePooling(nn.Module):
     def __init__(self, D, C, pooling_mode="max"):
         super(FeaturePooling, self).__init__()
+        self.D = D
+        self.C = C
         self.fc = nn.Linear(D, C)
-        self.sigmoid = nn.Sigmoid()
+        if C == 1:
+            self.sigmoid = nn.Sigmoid()
+        elif C > 2:
+            self.softmax = nn.Softmax()
         self.pooling_mode = pooling_mode
 
     def forward(self, x):
         x = choice_pooling(x, self.pooling_mode)
         x = self.fc(x)
-        output = self.sigmoid(x)
+        if self.C == 1:
+            output = self.sigmoid(x)
+        elif self.C > 2:
+            output = self.softmax(x)
         return output
 
 
@@ -175,7 +192,7 @@ class MI_Net(nn.Module):
             size[3], self.n_classes, pooling_mode=self.pooling_mode
         )
 
-    def forwrad(self, x):
+    def forward(self, x):
         x = self.fc1(x)
         x = self.fc2(x)
         x = self.fc3(x)
@@ -279,7 +296,7 @@ class Log(nn.Module):
         return torch.log(x)
 
 
-class MI_Net_PL(BaseMILModel):
+class MINet_PL(BaseMILModel):
     def __init__(
         self,
         config: DotMap,
@@ -289,7 +306,7 @@ class MI_Net_PL(BaseMILModel):
         pooling_mode="max",
         multires_aggregation: Union[None, str] = None,
     ):
-        super(MI_Net_PL, self).__init__(config, n_classes=n_classes)
+        super(MINet_PL, self).__init__(config, n_classes=n_classes)
         assert self.n_classes > 0, "n_classes must be greater than 0"
         if self.n_classes == 2:
             self.n_classes = 1
@@ -351,3 +368,12 @@ class MI_Net_PL(BaseMILModel):
         if len(h.shape) == 3:
             h = h.squeeze(dim=0)
         return self.model.forward(h)
+
+
+if __name__ == "__main__":
+    _data = torch.randn((1, 1000, 384))
+    for model in [mi_NET, MI_Net, MI_Net_DS, MI_Net_RC]:
+        _model = model()
+        print(_model.eval())
+        _results = _model(_data)
+        print(_results.shape)

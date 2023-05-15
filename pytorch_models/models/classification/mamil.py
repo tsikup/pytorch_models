@@ -92,7 +92,7 @@ class MultiAttentionMIL(nn.Module):
         return logits, a1, a2, a3
 
 
-class MAMIL(BaseMILModel):
+class MAMIL_PL(BaseMILModel):
     def __init__(
         self,
         config: DotMap,
@@ -101,7 +101,7 @@ class MAMIL(BaseMILModel):
         dropout: bool = True,
         multires_aggregation: Union[None, str] = None,
     ):
-        super(MAMIL, self).__init__(config, n_classes=n_classes)
+        super(MAMIL_PL, self).__init__(config, n_classes=n_classes)
         assert len(size) == 2, "size must be a tuple of (n_features, layer_size)"
         assert self.n_classes > 0, "n_classes must be greater than 0"
         if self.n_classes == 2:
@@ -141,3 +141,16 @@ class MAMIL(BaseMILModel):
         if len(h.shape) == 3:
             h = h.squeeze(dim=0)
         return self.model.forward(h)
+
+
+if __name__ == "__main__":
+    _data = torch.randn((1, 6000, 1024))
+    _model = MultiAttentionMIL(
+        num_classes=1,
+        size=(1024, 128),
+        use_dropout=True,
+        n_dropout=0.4,
+    )
+    print(_model.eval())
+    _results = _model(_data)
+    print(_results)
