@@ -257,14 +257,12 @@ class MI_Net_RC(nn.Module):
         else:
             p_size = size
 
-        self.fc0 = nn.Sequential(
+        self.fc1 = nn.Sequential(
             *[
                 nn.Sequential(nn.Linear(p_size[i], p_size[i + 1]), nn.ReLU())
                 for i in range(len(p_size) - 1)
             ]
         )
-
-        self.fc1 = nn.Sequential(nn.Linear(size[0], size[1]), nn.ReLU())
         self.fc2 = nn.Sequential(nn.Linear(size[1], size[1]), nn.ReLU())
         self.fc3 = nn.Sequential(nn.Linear(size[1], size[1]), nn.ReLU())
 
@@ -280,9 +278,7 @@ class MI_Net_RC(nn.Module):
         self.act = nn.Sigmoid() if self.n_classes == 1 else nn.Softmax()
 
     def forward(self, x):
-        x0 = self.fc0(x)
-
-        x1 = self.fc1(x0)
+        x1 = self.fc1(x)
         x1 = self.dropout1(x1)
         output1 = self.rc1(x1)
 
