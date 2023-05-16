@@ -91,7 +91,7 @@ def choice_pooling(x, pooling_mode):
         return max_pooling(x)
     if pooling_mode == "lse":
         return LSE_pooling(x)
-    if pooling_mode == "ave":
+    if pooling_mode in ["ave", "mean"]:
         return mean_pooling(x)
 
 
