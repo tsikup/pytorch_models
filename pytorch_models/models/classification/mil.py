@@ -417,11 +417,10 @@ class MIL_PL(BaseMILModel):
 
         if n_classes == 2:
             self.n_classes = 1
-            n_classes = 1
 
         assert self.mil_type in ["pred", "features", "clam_mil"]
 
-        if self.mil_type == "pred":
+        if self.mil_type is not None and self.mil_type == "pred":
             assert self.agg_level in ["preds", "logits"]
 
         self.loss = nn.CrossEntropyLoss()
