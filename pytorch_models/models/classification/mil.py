@@ -458,12 +458,13 @@ class MIL_PL(BaseMILModel):
 
     def forward(self, batch: dict[str, torch.Tensor]):
         # Batch
-        features, target = batch["features"], batch["labels"]
+        features, target = batch
 
         if (
             "top_k" in self.aggregates
             or "clam" in self.aggregates
             or "clam_mil" in self.aggregates
+            or self.mil_type == "clam_mil"
         ):
             # Prediction
             logits, preds, _, _, results_dict = self._forward(features)
