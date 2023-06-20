@@ -736,7 +736,7 @@ class PathDnaRna_PL(BaseMILModel):
         self,
         config: DotMap,
         n_classes: int,
-        multires=None,
+        multires=False,
     ):
         super().__init__(config=config, n_classes=n_classes)
 
@@ -782,11 +782,12 @@ class PathDnaRna_PL(BaseMILModel):
 
     def forward(self, batch, is_predict=False):
         # Batch
+        features_keys = ["features"] if not self.multires else ["features", "features_context"]
         features, dna, rna, clinical, target = (
-            batch["features"],
-            batch["dna"],
-            batch["rna"],
-            batch["clinical"],
+            dict((k, batch["features"][k]) for k in features_keys),
+            batch["features"]["dna"],
+            batch["features"]["rna"],
+            batch["features"]["clinical"],
             batch["labels"],
         )
 
