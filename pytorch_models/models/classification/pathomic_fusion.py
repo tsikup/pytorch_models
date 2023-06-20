@@ -461,6 +461,7 @@ class TrilinearFusion_B(nn.Module):
 
         ### Path
         self.linear_h1 = nn.Sequential(nn.Linear(dim1_og, dim1), nn.ReLU())
+        # Path + RNA
         self.linear_z1 = (
             nn.Bilinear(dim1_og, dim3_og, dim1)
             if use_bilinear
@@ -472,6 +473,7 @@ class TrilinearFusion_B(nn.Module):
 
         ### DNA
         self.linear_h2 = nn.Sequential(nn.Linear(dim2_og, dim2), nn.ReLU())
+        # DNA + Path
         self.linear_z2 = (
             nn.Bilinear(dim2_og, dim1_og, dim2)
             if use_bilinear
@@ -483,6 +485,7 @@ class TrilinearFusion_B(nn.Module):
 
         ### RNA
         self.linear_h3 = nn.Sequential(nn.Linear(dim3_og, dim3), nn.ReLU())
+        # RNA + Path
         self.linear_z3 = (
             nn.Bilinear(dim1_og, dim3_og, dim3)
             if use_bilinear
@@ -785,9 +788,9 @@ class PathDnaRna_PL(BaseMILModel):
         features_keys = ["features"] if not self.multires else ["features", "features_context"]
         features, dna, rna, clinical, target = (
             dict((k, batch["features"][k]) for k in features_keys),
-            batch["features"]["dna"],
-            batch["features"]["rna"],
-            batch["features"]["clinical"],
+            batch["features"]["dna"].float(),
+            batch["features"]["rna"].float(),
+            batch["features"]["clinical"].float(),
             batch["labels"],
         )
 
