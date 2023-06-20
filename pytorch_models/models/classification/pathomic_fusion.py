@@ -741,8 +741,9 @@ class PathDnaRna_PL(BaseMILModel):
         n_classes: int,
         multires=False,
     ):
+        if n_classes == 2:
+            n_classes = 1
         super().__init__(config=config, n_classes=n_classes)
-
         self.multires = multires
 
         # Imaging model
@@ -819,7 +820,11 @@ class PathDnaRna_PL(BaseMILModel):
         """
         Classifier
         """
-        logits = self.classifier(feats)
+        logits = self.classifier(feats).float()
+        
+        target = target.float()
+        if self.n_classes == 1:
+            logits = logits.squeeze(dim=1)
 
         loss = None
         if not is_predict:
