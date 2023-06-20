@@ -24,38 +24,17 @@ def init_max_weights(module):
 class MaxNet(nn.Module):
     def __init__(self, size: List[int], dropout_rate=0.25, init_max=True):
         super(MaxNet, self).__init__()
-        assert len(size) == 5
-        input_dim = size[0]
-        hidden = size[1:-1]
-        omic_dim = hidden[-1]
-
-        encoder1 = nn.Sequential(
-            nn.Linear(input_dim, hidden[0]),
-            nn.ELU(),
-            nn.AlphaDropout(p=dropout_rate, inplace=False),
-        )
-
-        encoder2 = nn.Sequential(
-            nn.Linear(hidden[0], hidden[1]),
-            nn.ELU(),
-            nn.AlphaDropout(p=dropout_rate, inplace=False),
-        )
-
-        encoder3 = nn.Sequential(
-            nn.Linear(hidden[1], hidden[2]),
-            nn.ELU(),
-            nn.AlphaDropout(p=dropout_rate, inplace=False),
-        )
-
-        encoder4 = nn.Sequential(
-            nn.Linear(hidden[2], omic_dim),
-            nn.ELU(),
-            nn.AlphaDropout(p=dropout_rate, inplace=False),
-        )
-
-        self.encoder = nn.Sequential(encoder1, encoder2, encoder3, encoder4)
+        encoder = []
+        for i in range(len(size) - 1):
+            encoder.append(
+                nn.Sequential(
+                    nn.Linear(size[i], size[i + 1]),
+                    nn.ELU(),
+                    nn.AlphaDropout(p=dropout_rate, inplace=False),
+                )
+            )
+        self.encoder = nn.Sequential(*encoder)
         # self.classifier = nn.Sequential(nn.Linear(omic_dim, n_classes))
-
         if init_max:
             init_max_weights(self)
 
