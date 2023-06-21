@@ -1,6 +1,8 @@
 import torch
 from torch import nn
 from pytorch_toolbelt import losses as L
+from balanced_loss import Loss as BalancedLoss
+from typing import List
 
 from pytorch_models.losses.utils import JointLoss
 
@@ -9,7 +11,12 @@ from pytorch_models.losses.utils import JointLoss
 # https://github.com/BloodAxe/pytorch-toolbelt/tree/develop/pytorch_toolbelt/losses
 # https://github.com/JunMa11/SegLoss
 # https://github.com/JunMa11/SegWithDistMap
-def get_loss(config_losses, classes_loss_weights=None, multi_loss_weights=None):
+def get_loss(
+    config_losses,
+    classes_loss_weights: List[int] = None,
+    multi_loss_weights: List[int] = None,
+    samples_per_cls: List[int] = None,
+):
     """
     Function to get training loss
 
@@ -18,6 +25,7 @@ def get_loss(config_losses, classes_loss_weights=None, multi_loss_weights=None):
     config_losses: List of losses.
     classes_loss_weights: List of weights for each class.
     multi_loss_weights: List of weights for each loss.
+    samples_per_cls: List of number of samples for each class.
 
     Returns
     -------
@@ -51,7 +59,7 @@ def get_loss(config_losses, classes_loss_weights=None, multi_loss_weights=None):
             losses.append(
                 L.SoftBCEWithLogitsLoss(ignore_index=-100, smooth_factor=None)
             )
-        elif loss == "balanced_bce":
+        elif loss == "batch_balanced_bce":
             losses.append(L.BalancedBCEWithLogitsLoss())
         elif loss == "binary_dice":
             # TODO: classes that contribute to loss computation and smooth
@@ -74,6 +82,33 @@ def get_loss(config_losses, classes_loss_weights=None, multi_loss_weights=None):
             losses.append(L.LovaszLoss())
         elif loss == "wing":
             losses.append(L.WingLoss())
+        elif loss == "balanced_ce":
+            assert samples_per_cls is not None
+            loss.append(
+                BalancedLoss(
+                    loss_type="ce",
+                    samples_per_class=samples_per_cls,
+                    class_balanced=True,
+                )
+            )
+        elif loss == "balanced_bce":
+            assert samples_per_cls is not None
+            loss.append(
+                BalancedLoss(
+                    loss_type="binary_cross_entropy",
+                    samples_per_class=samples_per_cls,
+                    class_balanced=True,
+                )
+            )
+        elif loss == "balanced_focal":
+            assert samples_per_cls is not None
+            loss.append(
+                BalancedLoss(
+                    loss_type="focal_loss",
+                    samples_per_class=samples_per_cls,
+                    class_balanced=True,
+                )
+            )
         else:
             raise RuntimeError("No loss with that name.")
 
