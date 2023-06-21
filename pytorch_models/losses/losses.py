@@ -86,7 +86,7 @@ def get_loss(
             assert samples_per_cls is not None
             losses.append(
                 BalancedLoss(
-                    loss_type="ce",
+                    loss_type="cross_entropy",
                     samples_per_class=samples_per_cls,
                     class_balanced=True,
                 )
