@@ -84,7 +84,7 @@ def get_loss(
             losses.append(L.WingLoss())
         elif loss == "balanced_ce":
             assert samples_per_cls is not None
-            loss.append(
+            losses.append(
                 BalancedLoss(
                     loss_type="ce",
                     samples_per_class=samples_per_cls,
@@ -93,7 +93,7 @@ def get_loss(
             )
         elif loss == "balanced_bce":
             assert samples_per_cls is not None
-            loss.append(
+            losses.append(
                 BalancedLoss(
                     loss_type="binary_cross_entropy",
                     samples_per_class=samples_per_cls,
@@ -102,7 +102,7 @@ def get_loss(
             )
         elif loss == "balanced_focal":
             assert samples_per_cls is not None
-            loss.append(
+            losses.append(
                 BalancedLoss(
                     loss_type="focal_loss",
                     samples_per_class=samples_per_cls,
