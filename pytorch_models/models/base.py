@@ -70,6 +70,7 @@ class BaseModel(L.LightningModule):
             config_losses=config.trainer.loss,
             classes_loss_weights=config.trainer.classes_loss_weights,
             multi_loss_weights=config.trainer.multi_loss_weights,
+            samples_per_cls=config.trainer.samples_per_class,
         )
 
         # Get metrics
