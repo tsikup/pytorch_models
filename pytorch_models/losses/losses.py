@@ -1,3 +1,4 @@
+import torch
 from torch import nn
 from pytorch_toolbelt import losses as L
 
@@ -22,20 +23,28 @@ def get_loss(config_losses, classes_loss_weights=None, multi_loss_weights=None):
     -------
     Loss function
     """
-    if classes_loss_weights is None:
-        classes_loss_weights = [1 for _ in config_losses]
+    # if classes_loss_weights is None:
+    #     classes_loss_weights = [1 for _ in config_losses]
     losses = []
     for loss in config_losses:
         if loss in ["ce", "crossentropy", "categorical_crossentropy"]:
             losses.append(
                 nn.CrossEntropyLoss(
-                    # weight=torch.FloatTensor(classes_loss_weights) if classes_loss_weights is not None else None,
+                    weight=torch.FloatTensor(classes_loss_weights)
+                    if classes_loss_weights is not None
+                    else None,
                     ignore_index=-100,
                     label_smoothing=0.0,
                 )
             )
         elif loss in ["bce", "binary_crossentropy"]:
-            losses.append(nn.BCEWithLogitsLoss())
+            losses.append(
+                nn.BCEWithLogitsLoss(
+                    pos_weight=torch.FloatTensor(classes_loss_weights)
+                    if classes_loss_weights is not None
+                    else None,
+                )
+            )
         elif loss == "soft_ce":
             losses.append(L.SoftCrossEntropyLoss(ignore_index=-100, smooth_factor=0.0))
         elif loss == "soft_bce":
