@@ -1,7 +1,6 @@
 """
 Data Efficient and Weakly Supervised Computational Pathology on Whole Slide Images. Nature Biomedical Engineering
 """
-import os
 from typing import Union, List
 
 import torch
