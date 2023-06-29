@@ -298,13 +298,13 @@ class FPNMIL_PL(BaseMILModel):
         super(FPNMIL_PL, self).__init__(config, n_classes=n_classes)
 
         if config.model.e2efp.classifier == "fpnmil":
-            self.model = FPNMIL(n_classes=n_classes, k=config.model.fpnmil.k)
+            self.model = FPNMIL(n_classes=n_classes, k=config.model.e2efp.k)
         elif config.model.e2efp.classifier == "fpnmil_mean":
-            self.model = FPNMIL_Mean(n_classes=n_classes, k=config.model.fpnmil.k)
+            self.model = FPNMIL_Mean(n_classes=n_classes, k=config.model.e2efp.k)
         elif config.model.e2efp.classifier == "fpnmil_att":
-            self.model = AttFPNMIL(n_classes=n_classes, k=config.model.fpnmil.k)
+            self.model = AttFPNMIL(n_classes=n_classes, k=config.model.e2efp.k)
         elif config.model.e2efp.classifier == "fpnmil_att2":
-            self.model = Att2FPNMIL(n_classes=n_classes, k=config.model.fpnmil.k)
+            self.model = Att2FPNMIL(n_classes=n_classes, k=config.model.e2efp.k)
 
     def forward(self, batch, is_predict=False):
         # Batch
