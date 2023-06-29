@@ -9,6 +9,7 @@ import os
 import random
 import warnings
 from collections import OrderedDict
+from pathlib import Path
 
 import h5py
 import numpy as np
@@ -414,7 +415,7 @@ class FPNMILDataset(Dataset):
         target = torch.vstack(target)
         return [data, target]
 
-    def read_hdf5(self, h5_path, load_ram=False):
+    def read_hdf5(self, h5_path):
         assert os.path.exists(h5_path), f"{h5_path} does not exist"
 
         # Open hdf5 file where images and labels are stored
@@ -447,6 +448,18 @@ class FPNMILDataset(Dataset):
                 label = torch.from_numpy(np.array([label], dtype=np.uint8))
 
         return images, label
+
+    def get_item(self, i: int):
+        return self.__getitem__(i)
+
+    def __getitem__(self, i: int):
+        h5_path = self.slides[i]
+        images, label = self.read_hdf5(h5_path)
+        return {
+            "images": images,
+            "labels": label,
+            "slide_name": Path(h5_path).name,
+        }
 
     def __len__(self):
         return self.dataset_size
