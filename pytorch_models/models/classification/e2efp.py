@@ -6,6 +6,7 @@ Author: Lei Cao
 """
 import glob
 import os
+import random
 import warnings
 from collections import OrderedDict
 
@@ -450,6 +451,78 @@ class FPNMILDataset(Dataset):
     @property
     def shape(self):
         return [self.dataset_size, self.img_shape]
+
+
+class PixelReg(object):
+    """Randomly replace tiles by an image with all pixel values set to
+    the mean pixel value of the dataset with a probability of 0.75.
+    """
+
+    def __init__(self, mean_pixels, p=0.25):
+        self.p = p
+        assert mean_pixels is not None
+        self.mean_pixels = mean_pixels
+
+    def __call__(self, img):
+        h = img.size(1)
+        w = img.size(2)
+
+        if torch.rand(1) < self.p:
+            mask = np.zeros((3, h, w), np.float32)
+            mask[0, ...] = self.mean_pixels[0]
+            mask[1, ...] = self.mean_pixels[1]
+            mask[2, ...] = self.mean_pixels[2]
+            _range = np.max(mask) - np.min(mask)
+            mask = (mask - np.min(mask)) / _range
+            mask = torch.from_numpy(mask)
+            return mask
+        else:
+            return img
+
+
+class Cutout(object):
+    """Randomly mask out one or more patches from an image"""
+
+    def __init__(self, n_holes, length):
+        self.n_holes = n_holes
+        self.length = length
+
+    def __call__(self, img):
+        """
+        Args:
+            img (tensor): Tensor image of size (C, H, W)
+        Returns:
+            Image with n_holes of dimension lengthxlength cut out of it
+        """
+        h = img.size(1)
+        w = img.size(2)
+
+        mask = np.ones((h, w), np.float32)
+        for n in range(self.n_holes):
+            y = np.random.randint(h)
+            x = np.random.randint(w)
+
+            y1 = np.clip(y - self.length // 2, 0, h)
+            y2 = np.clip(y + self.length // 2, 0, h)
+            x1 = np.clip(x - self.length // 2, 0, w)
+            x2 = np.clip(x + self.length // 2, 0, w)
+
+            mask[y1:y2, x1:x2] = 0.0
+
+        mask = torch.from_numpy(mask)
+        mask = mask.expand_as(img)
+        img = img * mask
+
+        return img
+
+
+class MyRotationTrans:
+    def __init__(self, angles):
+        self.angles = angles
+
+    def __call__(self, x):
+        angle = random.choice(self.angles)
+        return F.rotate(x, angle)
 
 
 if __name__ == "__main__":
