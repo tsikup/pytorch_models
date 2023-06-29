@@ -333,8 +333,10 @@ class FPNMIL_PL(BaseMILModel):
         }
 
     def _forward(self, data: Dict[str, torch.Tensor]):
-        h = [data[key] for key in data]
-        h = aggregate_features(h, method=self.multires_aggregation)
+        if self.multires_aggregation is None:
+            h = data["images_target"]
+        else:
+            raise NotImplementedError
         logits = self.model(h)
         if self.n_classes in [1, 2]:
             preds = torch.sigmoid(logits)
@@ -360,7 +362,7 @@ class FPNMILDataset(Dataset):
         :param data_dir: hdf5 folder
         :param data_cols: hdf5 dataset name, e.g.
                 {
-                    "features": "features",
+                    "images": "images_target",
                     "features_context": "features_context",
                     "labels": "labels"
                 }
@@ -381,8 +383,9 @@ class FPNMILDataset(Dataset):
         )
 
         assert (
-            "target" in self.data_cols and self.data_cols["features_target"] is not None
-        ), "`features_target` is required in `data_cols`"
+            "images_target" in self.data_cols
+            and self.data_cols["images_target"] is not None
+        ), "`images_target` is required in `data_cols`"
 
         assert os.path.isdir(data_dir), f"{data_dir} is not a directory"
 
