@@ -287,7 +287,7 @@ class FPNMIL_Mean(nn.Module):
         return out
 
 
-class FPNMIL_Features_PL(BaseMILModel):
+class FPNMIL_PL(BaseMILModel):
     def __init__(
         self,
         config,
@@ -295,15 +295,15 @@ class FPNMIL_Features_PL(BaseMILModel):
         multires_aggregation=None,
     ):
         self.multires_aggregation = multires_aggregation
-        super(FPNMIL_Features_PL, self).__init__(config, n_classes=n_classes)
+        super(FPNMIL_PL, self).__init__(config, n_classes=n_classes)
 
-        if config.model.fpnmil.name == "fpnmil":
+        if config.model.e2efp.classifier == "fpnmil":
             self.model = FPNMIL(n_classes=n_classes, k=config.model.fpnmil.k)
-        elif config.model.fpnmil.name == "fpnmil_mean":
+        elif config.model.e2efp.classifier == "fpnmil_mean":
             self.model = FPNMIL_Mean(n_classes=n_classes, k=config.model.fpnmil.k)
-        elif config.model.fpnmil.name == "fpnmil_att":
+        elif config.model.e2efp.classifier == "fpnmil_att":
             self.model = AttFPNMIL(n_classes=n_classes, k=config.model.fpnmil.k)
-        elif config.model.fpnmil.name == "fpnmil_att2":
+        elif config.model.e2efp.classifier == "fpnmil_att2":
             self.model = Att2FPNMIL(n_classes=n_classes, k=config.model.fpnmil.k)
 
     def forward(self, batch, is_predict=False):
