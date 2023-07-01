@@ -10,12 +10,14 @@ import random
 import warnings
 from collections import OrderedDict
 from pathlib import Path
+from PIL import Image
 
 import h5py
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.transforms import functional as FT
 from pytorch_models.models.base import BaseMILModel
 from pytorch_models.utils.tensor import aggregate_features
 from torch.jit.annotations import Dict
@@ -67,7 +69,7 @@ class MaxPool(nn.Module):
         self.classifier = nn.Linear(512, self.n_classes)
 
     def forward(self, x):
-        x = x.view(-1, 3, x.shape[-2], x.shape[-3])
+        x = x.view(-1, 3, x.shape[-2], x.shape[-1])
         x = self.feature_extractor(x)
         x = self.pool(x)
         x = x.view(x.shape[0], x.shape[1])
@@ -100,7 +102,7 @@ class AttFPNMIL(nn.Module):
         self.classifier = nn.Linear(512, self.n_classes)
 
     def forward(self, x):
-        x = x.view(-1, 3, x.shape[-2], x.shape[-3])
+        x = x.view(-1, 3, x.shape[-2], x.shape[-1])
         inter_feats = self.layergetter(x)
         feat1 = self.gap(F.relu(self.conv64_512(inter_feats["feat1"])))
         feat2 = self.gap(F.relu(self.conv128_512(inter_feats["feat2"])))
@@ -149,7 +151,7 @@ class Att2FPNMIL(nn.Module):
         self.classifier = nn.Linear(128, self.n_classes)
 
     def forward(self, x):
-        x = x.view(-1, 3, x.shape[-2], x.shape[-3])
+        x = x.view(-1, 3, x.shape[-2], x.shape[-1])
         inter_feats = self.layergetter(x)
         feat1 = self.gap(F.relu(self.conv64_512(inter_feats["feat1"])))
         feat2 = self.gap(F.relu(self.conv128_512(inter_feats["feat2"])))
@@ -193,22 +195,25 @@ class FPNMIL(nn.Module):
         self.classifier = nn.Linear(512, self.n_classes)
 
     def forward(self, x):
-        x = x.view(-1, 3, x.shape[-2], x.shape[-3])
+        x = x.view(-1, 3, x.shape[-2], x.shape[-1])
         inter_feats = self.layergetter(x)
         feat1 = self.gap(F.relu(self.conv64_512(inter_feats["feat1"])))
         feat2 = self.gap(F.relu(self.conv128_512(inter_feats["feat2"])))
         feat3 = self.gap(F.relu(self.conv256_512(inter_feats["feat3"])))
         feat4 = self.gap(inter_feats["feat4"])
-
+        
         feat1 = feat1.view(feat1.shape[0], feat1.shape[1])
         feat2 = feat2.view(feat2.shape[0], feat2.shape[1])
         feat3 = feat3.view(feat3.shape[0], feat3.shape[1])
         feat4 = feat4.view(feat4.shape[0], feat4.shape[1])
+        
         merged_feat = feat1 + feat2 + feat3 + feat4
         merged_feat = merged_feat.view(-1, self.k, 512)
+        
         # _, top_index = merged_feat.max(dim=1)
         x, _ = torch.max(merged_feat, dim=1)
         out = self.classifier(x)
+        
         return out  # , top_index
 
 
@@ -232,7 +237,7 @@ class FPNMIL50(nn.Module):
         self.classifier = nn.Linear(2048, self.n_classes)
 
     def forward(self, x):
-        x = x.view(-1, 3, x.shape[-2], x.shape[-3])
+        x = x.view(-1, 3, x.shape[-2], x.shape[-1])
         inter_feats = self.layergetter(x)
         feat1 = self.gap(F.relu(self.conv64_512(inter_feats["feat1"])))
         feat2 = self.gap(F.relu(self.conv128_512(inter_feats["feat2"])))
@@ -270,7 +275,7 @@ class FPNMIL_Mean(nn.Module):
         self.classifier = nn.Linear(512, self.n_class)
 
     def forward(self, x):
-        x = x.view(-1, 3, x.shape[-2], x.shape[-3])
+        x = x.view(-1, 3, x.shape[-2], x.shape[-1])
         inter_feats = self.layergetter(x)
         feat1 = self.gap(F.relu(self.conv64_512(inter_feats["feat1"])))
         feat2 = self.gap(F.relu(self.conv128_512(inter_feats["feat2"])))
@@ -298,15 +303,18 @@ class FPNMIL_PL(BaseMILModel):
     ):
         self.multires_aggregation = multires_aggregation
         super(FPNMIL_PL, self).__init__(config, n_classes=n_classes)
+        
+        if self.n_classes == 2:
+            self.n_classes = 1
 
         if config.model.e2efp.classifier == "fpnmil":
-            self.model = FPNMIL(n_classes=n_classes, k=config.model.e2efp.k)
+            self.model = FPNMIL(n_classes=self.n_classes, k=config.model.e2efp.k)
         elif config.model.e2efp.classifier == "fpnmil_mean":
-            self.model = FPNMIL_Mean(n_classes=n_classes, k=config.model.e2efp.k)
+            self.model = FPNMIL_Mean(n_classes=self.n_classes, k=config.model.e2efp.k)
         elif config.model.e2efp.classifier == "fpnmil_att":
-            self.model = AttFPNMIL(n_classes=n_classes, k=config.model.e2efp.k)
+            self.model = AttFPNMIL(n_classes=self.n_classes, k=config.model.e2efp.k)
         elif config.model.e2efp.classifier == "fpnmil_att2":
-            self.model = Att2FPNMIL(n_classes=n_classes, k=config.model.e2efp.k)
+            self.model = Att2FPNMIL(n_classes=self.n_classes, k=config.model.e2efp.k)
 
     def forward(self, batch, is_predict=False):
         # Batch
@@ -320,11 +328,7 @@ class FPNMIL_PL(BaseMILModel):
         loss = None
         if not is_predict:
             # Loss (on logits)
-            loss = self.loss.forward(logits, target.squeeze(dim=1))
-
-        if self.n_classes in [1, 2]:
-            preds = preds[:, 1]
-            preds = torch.unsqueeze(preds, dim=1)
+            loss = self.loss.forward(logits.squeeze(dim=1).float(), target.squeeze(dim=1).float())
 
         return {
             "target": target,
@@ -433,8 +437,12 @@ class FPNMILDataset(Dataset):
                         )
                     )
                     images = images[indices]
+                    
                     if self.transform is not None:
-                        images = self.transform(images)
+                        _images = []
+                        for idx in range(len(images)):
+                            _images.append(self.transform(images[idx]))
+                        images = torch.stack(_images)
                     else:
                         images = torch.from_numpy(images)
 
@@ -447,7 +455,7 @@ class FPNMILDataset(Dataset):
                 label = -100
                 label = torch.from_numpy(np.array([label], dtype=np.uint8))
 
-        return images, label
+        return images_dict, label
 
     def get_item(self, i: int):
         return self.__getitem__(i)
@@ -538,7 +546,14 @@ class MyRotationTrans:
 
     def __call__(self, x):
         angle = random.choice(self.angles)
-        return F.rotate(x, angle)
+        return FT.rotate(x, angle)
+    
+class NP2PIL:
+    def __init__(self) -> None:
+        pass
+    
+    def __call__(self, x):
+        return Image.fromarray(x)
 
 
 if __name__ == "__main__":
