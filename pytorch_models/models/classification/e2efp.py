@@ -432,11 +432,24 @@ class FPNMILDataset(Dataset):
                     indices = np.sort(
                         np.random.choice(
                             len(images),
-                            size=min(self.k, len(images)),
-                            replace=len(images) < self.k,
+                            size=min(len(images), self.k),
+                            replace=False,
                         )
                     )
                     images = images[indices]
+                    
+                    if len(images) < self.k:
+                        images = np.concatenate(
+                            [images,
+                             images[
+                                np.random.choice(
+                                    len(images),
+                                    size=self.k - len(images),
+                                    replace=True
+                                    )
+                                ]
+                            ], axis=0
+                        )
                     
                     if self.transform is not None:
                         _images = []
