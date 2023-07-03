@@ -322,7 +322,7 @@ class MINet_PL(BaseMILModel):
         if self.n_classes == 1:
             self.loss = nn.BCELoss()
         else:
-            self.loss = nn.Sequential(Log(), nn.NLLLoss())
+            self.loss = nn.NLLLoss()
 
         self.dropout = dropout
         self.pooling_mode = pooling_mode
@@ -360,7 +360,10 @@ class MINet_PL(BaseMILModel):
 
         loss = None
         if not is_predict:
-            loss = self.loss.forward(preds.float(), target.float())
+            if self.n_classes > 2:
+                loss = self.loss.forward(torch.log(preds), target)
+            else:
+                loss = self.loss.forward(preds.float(), target.float())
 
         return {
             "target": target,
