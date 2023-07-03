@@ -136,47 +136,48 @@ def get_classification_metrics(
             ),
         ]
 
-        if mode in ["eval", "test"]:
-            metrics.append(
-                MetricCollection(
-                    [
-                        Accuracy(
-                            task="binary" if n_classes in [1, 2] else "multiclass",
-                            average="none",
-                            num_classes=1 if n_classes in [1, 2] else n_classes,
-                            dist_sync_on_step=dist_sync_on_step,
-                        ),
-                        Recall(
-                            task="binary" if n_classes in [1, 2] else "multiclass",
-                            average="none",
-                            num_classes=1 if n_classes in [1, 2] else n_classes,
-                            dist_sync_on_step=dist_sync_on_step,
-                        ),
-                        Specificity(
-                            task="binary" if n_classes in [1, 2] else "multiclass",
-                            average="none",
-                            num_classes=1 if n_classes in [1, 2] else n_classes,
-                            dist_sync_on_step=dist_sync_on_step,
-                        ),
-                        Precision(
-                            task="binary" if n_classes in [1, 2] else "multiclass",
-                            average="none",
-                            num_classes=1 if n_classes in [1, 2] else n_classes,
-                            dist_sync_on_step=dist_sync_on_step,
-                        ),
-                        F1Score(
-                            task="binary" if n_classes in [1, 2] else "multiclass",
-                            average="none",
-                            num_classes=1 if n_classes in [1, 2] else n_classes,
-                            dist_sync_on_step=dist_sync_on_step,
-                        ),
-                        AUROC(
-                            task="binary" if n_classes in [1, 2] else "multiclass",
-                            num_classes=n_classes,
-                        ),
-                    ]
-                )
-            )
+        # if mode in ["eval", "test"]:
+        #     metrics.append(
+        #         MetricCollection(
+        #             [
+        #                 Accuracy(
+        #                     task="multiclass",
+        #                     average="none",
+        #                     num_classes=n_classes,
+        #                     dist_sync_on_step=dist_sync_on_step,
+        #                 ),
+        #                 Recall(
+        #                     task="multiclass",
+        #                     average="none",
+        #                     num_classes=n_classes,
+        #                     dist_sync_on_step=dist_sync_on_step,
+        #                 ),
+        #                 Specificity(
+        #                     task="multiclass",
+        #                     average="none",
+        #                     num_classes=n_classes,
+        #                     dist_sync_on_step=dist_sync_on_step,
+        #                 ),
+        #                 Precision(
+        #                     task="multiclass",
+        #                     average="none",
+        #                     num_classes=n_classes,
+        #                     dist_sync_on_step=dist_sync_on_step,
+        #                 ),
+        #                 F1Score(
+        #                     task="multiclass",
+        #                     average="none",
+        #                     num_classes=n_classes,
+        #                     dist_sync_on_step=dist_sync_on_step,
+        #                 ),
+        #                 AUROC(
+        #                     task="multiclass",
+        #                     average="none",
+        #                     num_classes=n_classes,
+        #                 ),
+        #             ]
+        #         )
+        #     )
         metrics = MetricCollection(metrics)
 
     return metrics

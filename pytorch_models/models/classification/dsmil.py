@@ -182,8 +182,7 @@ class DSMIL_PL(BaseMILModel):
         classes, logits, A, B = self._forward(features)
         # Loss (on logits)
         if self.n_classes > 2:
-            target = target.squeeze(dim=1)
-            loss = self.loss.forward(logits, target)
+            loss = self.loss.forward(logits, target.squeeze(dim=1))
         else:
             loss = self.loss.forward(logits, target.float())
         # Sigmoid or Softmax activation
