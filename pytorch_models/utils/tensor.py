@@ -32,6 +32,10 @@ def aggregate_features(
         else:
             h = torch.stack(features, dim=-1)
             h = torch.sum(h, dim=-1)
+    elif method == "lse":
+        h = [torch.exp(f) for f in features]
+        h = torch.stack(h, dim=-1)
+        h = torch.log(torch.mean(h, dim=-1, keepdim=True))
     else:
         h = features[0]
     return h
