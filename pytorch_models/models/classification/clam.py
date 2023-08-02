@@ -447,7 +447,7 @@ class CLAM_SB(nn.Module):
         elif method == "lse":
             h = [torch.exp(f) for f in features]
             h = torch.stack(h, dim=-1)
-            h = torch.log(torch.mean(h, dim=-1, keepdim=True))
+            h = torch.log(torch.mean(h, dim=-1, keepdim=True)).squeeze(-1)
         else:
             h = features[0]
         return h
