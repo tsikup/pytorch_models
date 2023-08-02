@@ -428,10 +428,10 @@ class CLAM_SB(nn.Module):
             h = torch.mean(h, dim=-1)
         elif method == "max":
             h = torch.stack(features, dim=-1)
-            h = torch.max(h, dim=-1)
+            h = torch.max(h, dim=-1)[0]
         elif method == "min":
             h = torch.stack(features, dim=-1)
-            h = torch.min(h, dim=-1)
+            h = torch.min(h, dim=-1)[0]
         elif method == "mul":
             if len(features) == 2:
                 h = torch.mul(*features)
