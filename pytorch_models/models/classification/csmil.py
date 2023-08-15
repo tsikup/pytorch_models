@@ -122,12 +122,15 @@ class CSMIL_PL(BaseMILModel):
         n_classes: int,
         size: int = 1024,
         cluster_num: int = 1,
+        multires_aggregation: Union[None, str] = None,
     ):
         super(CSMIL_PL, self).__init__(config, n_classes=n_classes)
 
         assert self.n_classes > 0, "n_classes must be greater than 0"
         if self.n_classes == 2:
             self.n_classes = 1
+
+        self.multires_aggregation = multires_aggregation
 
         self.model = CSMIL(
             cluster_num=cluster_num, feature_size=size, n_classes=self.n_classes
@@ -157,7 +160,8 @@ class CSMIL_PL(BaseMILModel):
 
     def _forward(self, features):
         h = [features[key] for key in features]
-        h = torch.stack(h, dim=-1)
+        h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
+        # h = torch.stack(h, dim=-1)
         h = h.unsqueeze(dim=-1)
         if len(h.shape) == 4:
             h = h.unsqueeze(dim=0)
