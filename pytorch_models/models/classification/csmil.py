@@ -160,8 +160,11 @@ class CSMIL_PL(BaseMILModel):
 
     def _forward(self, features):
         h = [features[key] for key in features]
-        h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
-        # h = torch.stack(h, dim=-1)
+        if self.multires_aggregation == "concat":
+            h = torch.stack(h, dim=-1)
+        else:
+            h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
+            h = h.unsqueeze(dim=-1)
         h = h.unsqueeze(dim=-1)
         if len(h.shape) == 4:
             h = h.unsqueeze(dim=0)
