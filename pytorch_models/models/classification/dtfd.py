@@ -159,6 +159,7 @@ class DTFD_PL(BaseMILModel):
         size: Union[List[int], Tuple[int, int]] = None,
         K: int = 1,
         n_bags=3,
+        n_dropout=0.25,
         multires_aggregation: Union[None, str] = None,
     ):
         super(DTFD_PL, self).__init__(config, n_classes=n_classes)
@@ -175,7 +176,7 @@ class DTFD_PL(BaseMILModel):
             n_classes=self.n_classes,
             K=K,
             n_bags=n_bags,
-            dropout=config.model.dropout,
+            dropout=n_dropout,
         )
 
     def forward(self, batch, is_predict=False):
