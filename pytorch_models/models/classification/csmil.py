@@ -78,7 +78,7 @@ class CSMIL(nn.Module):
         "x is a tensor list"
         res = []
         for i in range(self.cluster_num):
-            hh = x[i].type(torch.FloatTensor)
+            hh = x[i]
             n_scales = hh.size(2)
             output = []
             for j in range(n_scales):
