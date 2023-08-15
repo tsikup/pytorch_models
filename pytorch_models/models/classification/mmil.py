@@ -399,12 +399,10 @@ class MMIL_PL(BaseMILModel):
 
         # Prediction
         logits, preds, _ = self._forward(features)
-        logits = logits.squeeze(dim=1)
-        target = target.squeeze(dim=1)
 
         loss = None
         if not is_predict:
-            loss = self.loss.forward(logits, target)
+            loss = self.loss.forward(logits, target.squeeze(dim=1))
 
         return {
             "target": target,
@@ -419,6 +417,18 @@ class MMIL_PL(BaseMILModel):
         if len(h.shape) == 2:
             h = h.unsqueeze(dim=0)
         return self.model.forward(h)
+    
+    def _compute_metrics(self, preds, target, mode):
+        if mode == "val":
+            metrics = self.val_metrics
+        elif mode == "train":
+            metrics = self.train_metrics
+        elif mode in ["eval", "test"]:
+            metrics = self.test_metrics
+        if self.n_classes == 1:
+            metrics(preds, nn.functional.one_hot(target.view(-1), num_classes=self.n_classes))
+        else:
+            metrics(preds, nn.functional.one_hot(target.view(-1), num_classes=self.n_classes))
 
 
 if __name__ == "__main__":
