@@ -143,12 +143,7 @@ class DTFD(nn.Module):
         slide_pseudo_feat = torch.cat(slide_pseudo_feat, dim=0)  ### numGroup x fs
         logits = self.UClassifier(slide_pseudo_feat)  ### 1 x num_cls
 
-        if self.n_classes == 1:
-            Y_hat = torch.ge(torch.sigmoid(logits), 0.5).float()
-        else:
-            Y_hat = torch.topk(logits, 1, dim=1)[1].float()
-
-        return logits, slide_sub_logits, Y_hat
+        return logits, slide_sub_logits
 
 
 class DTFD_PL(BaseMILModel):
@@ -184,7 +179,7 @@ class DTFD_PL(BaseMILModel):
         features, target = batch["features"], batch["labels"]
 
         # Prediction
-        logits, sub_logits, _ = self._forward(features)
+        logits, sub_logits = self._forward(features)
         if self.n_classes == 1:
             preds = torch.sigmoid(logits)
         else:
