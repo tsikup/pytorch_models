@@ -184,7 +184,12 @@ class DTFD_PL(BaseMILModel):
         features, target = batch["features"], batch["labels"]
 
         # Prediction
-        logits, sub_logits, preds = self._forward(features)
+        logits, sub_logits, _ = self._forward(features)
+        if self.n_classes == 1:
+            preds = torch.sigmoid(logits)
+        else:
+            preds = torch.softmax(logits, dim=1)
+
         logits = logits.squeeze(dim=1)
         target = target.squeeze(dim=1)
 
