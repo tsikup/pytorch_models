@@ -417,7 +417,7 @@ class MMIL_PL(BaseMILModel):
         if len(h.shape) == 2:
             h = h.unsqueeze(dim=0)
         return self.model.forward(h)
-    
+
     def _compute_metrics(self, preds, target, mode):
         if mode == "val":
             metrics = self.val_metrics
@@ -426,9 +426,15 @@ class MMIL_PL(BaseMILModel):
         elif mode in ["eval", "test"]:
             metrics = self.test_metrics
         if self.n_classes == 1:
-            metrics(preds, nn.functional.one_hot(target.view(-1), num_classes=self.n_classes))
+            metrics(
+                preds,
+                nn.functional.one_hot(target.view(-1), num_classes=self.n_classes),
+            )
         else:
-            metrics(preds, nn.functional.one_hot(target.view(-1), num_classes=self.n_classes))
+            metrics(
+                preds,
+                nn.functional.one_hot(target.view(-1), num_classes=self.n_classes),
+            )
 
 
 if __name__ == "__main__":
