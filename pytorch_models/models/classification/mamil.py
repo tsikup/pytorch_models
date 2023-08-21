@@ -127,7 +127,7 @@ class MAMIL_PL(BaseMILModel):
         loss = None
         if not is_predict:
             loss = self.loss.forward(
-                logits, target.float() if n_classes == 1 else target
+                logits, target.float() if self.n_classes == 1 else target
             )
 
         preds = torch.sigmoid(logits) if self.n_classes == 1 else F.softmax(logits)
