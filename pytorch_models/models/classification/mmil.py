@@ -431,10 +431,7 @@ class MMIL_PL(BaseMILModel):
                 nn.functional.one_hot(target.view(-1), num_classes=self.n_classes),
             )
         else:
-            metrics(
-                preds,
-                nn.functional.one_hot(target.view(-1), num_classes=self.n_classes),
-            )
+            metrics(preds, target.view(-1))
 
 
 if __name__ == "__main__":
