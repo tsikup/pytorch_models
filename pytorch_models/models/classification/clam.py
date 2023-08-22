@@ -305,6 +305,7 @@ class CLAM_SB(nn.Module):
             ), "Multiresolution integration at the attention level is enabled.. The aggregation function must not be concat for the attention vectors, because each tile feature vector (either integrated or not) should have a single attention score."
 
         if (
+            self.use_multires and
             self.multires_aggregation["features"] == "concat" 
             and self.multires_aggregation["attention"] == "late"
         ):
