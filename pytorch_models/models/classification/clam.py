@@ -305,8 +305,8 @@ class CLAM_SB(nn.Module):
             ), "Multiresolution integration at the attention level is enabled.. The aggregation function must not be concat for the attention vectors, because each tile feature vector (either integrated or not) should have a single attention score."
 
         if (
-            self.use_multires and
-            self.multires_aggregation["features"] == "concat" 
+            self.use_multires
+            and self.multires_aggregation["features"] == "concat"
             and self.multires_aggregation["attention"] == "late"
         ):
             _downsample = 2
@@ -328,10 +328,13 @@ class CLAM_SB(nn.Module):
                 for idx, _ in enumerate(self.classifier_size[:-1]):
                     _tmp_instance_classifier.append(
                         nn.Linear(
-                            self.classifier_size[idx] // _downsample, self.classifier_size[idx + 1] // _downsample
+                            self.classifier_size[idx] // _downsample,
+                            self.classifier_size[idx + 1] // _downsample,
                         )
                     )
-                _tmp_instance_classifier.append(nn.Linear(self.classifier_size[-1] // _downsample, 2))
+                _tmp_instance_classifier.append(
+                    nn.Linear(self.classifier_size[-1] // _downsample, 2)
+                )
                 _instance_classifiers[c] = nn.Sequential(*_tmp_instance_classifier)
             self.instance_classifiers = nn.ModuleList(
                 [_instance_classifiers[c] for c in range(n_classes)]
@@ -340,7 +343,8 @@ class CLAM_SB(nn.Module):
             self.classifiers = nn.Linear(self.classifier_size[0], n_classes)
 
             instance_classifiers = [
-                nn.Linear(self.classifier_size[0] // _downsample, 2) for i in range(n_classes)
+                nn.Linear(self.classifier_size[0] // _downsample, 2)
+                for i in range(n_classes)
             ]
             self.instance_classifiers = nn.ModuleList(instance_classifiers)
 

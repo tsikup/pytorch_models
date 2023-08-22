@@ -425,7 +425,7 @@ class MMIL_PL(BaseMILModel):
             metrics = self.train_metrics
         elif mode in ["eval", "test"]:
             metrics = self.test_metrics
-        if self.n_classes in [1,2]:
+        if self.n_classes in [1, 2]:
             metrics(
                 preds,
                 nn.functional.one_hot(target.view(-1), num_classes=self.n_classes),
