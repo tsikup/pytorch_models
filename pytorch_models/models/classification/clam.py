@@ -590,7 +590,7 @@ class CLAM_SB(nn.Module):
                 results_dict.update({"features": M})
             else:
                 results_dict.update({"features": None})
-            return logits, Y_prob, Y_hat, A_raw, results_dict
+            return logits, Y_prob, Y_hat, (A_raw, A_context_raw), results_dict
         else:
             if attention_only:
                 return A
