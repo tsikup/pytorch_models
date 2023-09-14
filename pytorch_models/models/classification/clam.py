@@ -892,7 +892,7 @@ class CLAM_PL(BaseMILModel):
         features, target = batch["features"], batch["labels"]
 
         # Prediction
-        logits, preds, _, _, results_dict = self._forward(
+        logits, preds, _, A, results_dict = self._forward(
             h=features["features"],
             h_context=features["features_context"]
             if (
@@ -925,6 +925,7 @@ class CLAM_PL(BaseMILModel):
             "target": target,
             "preds": preds,
             "loss": loss,
+            "attention": A,
             "slide_name": batch["slide_name"],
         }
 
