@@ -12,13 +12,34 @@ from torchmetrics import (
 import numpy as np
 import torch
 
+from pytorch_models.utils.survival import (
+    CIndex,
+    CoxLogRank,
+    AccuracyCox,
+)
+
 
 def get_metrics(
-    config, n_classes, mode="train", dist_sync_on_step=False, segmentation=False
+    config,
+    n_classes,
+    mode="train",
+    dist_sync_on_step=False,
+    segmentation=False,
+    survival=False,
 ):
+    assert not (
+        segmentation and survival
+    ), "Cannot have both segmentation and survival metrics"
     if segmentation:
         return get_segmentation_metrics(config, n_classes, mode, dist_sync_on_step)
+    if survival:
+        return get_survival_metrics()
     return get_classification_metrics(config, n_classes, mode, dist_sync_on_step)
+
+
+def get_survival_metrics():
+    metrics = MetricCollection([CIndex(), CoxLogRank(), AccuracyCox()])
+    return metrics
 
 
 def get_classification_metrics(

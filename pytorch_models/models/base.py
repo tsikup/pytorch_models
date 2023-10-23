@@ -6,14 +6,13 @@ import torch
 from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
 from dotmap import DotMap
 from lightning.pytorch.core.optimizer import LightningOptimizer
-from torch_optimizer import AdaBound, SWATS, DiffGrad, AggMo, Apollo
-
 from pytorch_models.losses.losses import get_loss
 from pytorch_models.optim.lookahead import Lookahead
 from pytorch_models.optim.utils import get_warmup_factor
 from pytorch_models.utils.metrics.metrics import get_metrics
+from pytorch_models.utils.survival import coxloss
 from ranger21 import Ranger21
-from timm.optim import AdamP, AdaBelief
+from timm.optim import AdaBelief, AdamP
 from torch.optim import (
     ASGD,
     SGD,
@@ -28,15 +27,15 @@ from torch.optim import (
     SparseAdam,
 )
 from torch.optim.lr_scheduler import (
+    CosineAnnealingLR,
+    CyclicLR,
+    ExponentialLR,
+    MultiStepLR,
     OneCycleLR,
     ReduceLROnPlateau,
     StepLR,
-    MultiStepLR,
-    ExponentialLR,
-    CosineAnnealingLR,
-    CyclicLR,
 )
-
+from torch_optimizer import SWATS, AdaBound, AggMo, Apollo, DiffGrad
 
 # TODO: inference sliding window
 #  https://github.com/YtongXie/CoTr/blob/main/CoTr_package/CoTr/network_architecture/neural_network.py
@@ -438,6 +437,165 @@ class BaseMILModel(BaseModel):
     def predict_step(self, batch, batch_idx):
         output = self.forward(batch, is_predict=True)
         return output["preds"], batch["labels"], batch["slide_name"]
+
+
+class BaseMILSurvModel(BaseModel):
+    def __init__(
+        self,
+        config: DotMap,
+        n_classes: int,
+    ):
+        super(BaseMILSurvModel, self).__init__(
+            config, n_classes=n_classes, in_channels=None, segmentation=False
+        )
+        self.loss = None
+        del self.loss
+
+        self.train_metrics = get_metrics(
+            self.config,
+            n_classes=self.n_classes,
+            dist_sync_on_step=False,
+            mode="train",
+            segmentation=False,
+            survival=True,
+        ).clone(prefix="train_")
+
+        self.val_metrics = get_metrics(
+            self.config,
+            n_classes=self.n_classes,
+            dist_sync_on_step=False,
+            mode="val",
+            segmentation=False,
+            survival=True,
+        ).clone(prefix="val_")
+
+        self.test_metrics = get_metrics(
+            self.config,
+            n_classes=self.n_classes,
+            dist_sync_on_step=False,
+            mode="test",
+            segmentation=False,
+            survival=True,
+        ).clone(prefix="test_")
+
+    def forward(self, batch, is_predict=False):
+        # Batch
+        features, censor, survtime = (
+            batch["features"],
+            batch["censor"],
+            batch["survtime"],
+        )
+        # Prediction
+        logits = self._forward(features)
+        # Loss (on logits)
+        loss_cox = coxloss(survtime, censor, logits, logits.device)
+        loss_reg = self.l1_regularisation()
+        if hasattr(self, "lambda_reg"):
+            loss = loss_cox + self.lambda_reg * loss_reg
+        else:
+            loss = loss_cox
+
+        return {
+            "censor": censor,
+            "survtime": survtime,
+            "preds": logits,
+            "loss": loss,
+            "slide_name": batch["slide_name"],
+        }
+
+    def _forward(self, x):
+        raise NotImplementedError
+
+    def _compute_metrics(self, hazards, censors, survtimes, mode):
+        if mode == "val":
+            metrics = self.val_metrics
+        elif mode == "train":
+            metrics = self.train_metrics
+        elif mode in ["eval", "test"]:
+            metrics = self.test_metrics
+        metrics(hazards, censors, survtimes)
+
+    def _log_metrics(self, hazards, censors, survtimes, loss, mode):
+        on_step = False if mode != "train" else True
+        # https://github.com/Lightning-AI/lightning/issues/13210
+        sync_dist = self.sync_dist and (
+            mode == "val" or mode == "test" or mode == "eval"
+        )
+        if mode == "val":
+            metrics = self.val_metrics
+        elif mode == "train":
+            metrics = self.train_metrics
+        elif mode == "test":
+            metrics = self.test_metrics
+
+        self._compute_metrics(hazards, censors, survtimes, mode)
+        self.log_dict(
+            metrics, on_step=False, on_epoch=True, prog_bar=False, logger=True
+        )
+        self.log(
+            f"{mode}_loss",
+            loss,
+            on_step=on_step,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+            sync_dist=sync_dist,
+        )
+
+    def training_step(self, batch, batch_idx):
+        output = self.forward(batch)
+        censors, survtimes, preds, loss = (
+            output["censors"],
+            output["survtimes"],
+            output["preds"],
+            output["loss"],
+        )
+        self._log_metrics(preds, censors, survtimes, loss, "train")
+        return {
+            "loss": loss,
+            "preds": preds,
+            "censors": censors,
+            "survtimes": survtimes,
+        }
+
+    def validation_step(self, batch, batch_idx):
+        output = self.forward(batch)
+        censors, survtimes, preds, loss = (
+            output["censors"],
+            output["survtimes"],
+            output["preds"],
+            output["loss"],
+        )
+        self._log_metrics(preds, censors, survtimes, loss, "val")
+        return {
+            "val_loss": loss,
+            "val_preds": preds,
+            "val_censor": censors,
+            "val_survtime": survtimes,
+        }
+
+    def test_step(self, batch, batch_idx):
+        output = self.forward(batch)
+
+        censors, survtimes, preds, loss = (
+            output["censors"],
+            output["survtimes"],
+            output["preds"],
+            output["loss"],
+        )
+
+        self._log_metrics(preds, censors, survtimes, loss, "test")
+
+        return {
+            "test_loss": loss,
+            "test_preds": preds,
+            "censor": censors,
+            "survtime": survtimes,
+        }
+
+    def predict_step(self, batch, batch_idx):
+        output = self.forward(batch, is_predict=True)
+        return output
 
 
 class EnsembleInferenceModel(BaseModel):
