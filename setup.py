@@ -24,6 +24,7 @@ setup(
         "pytorch_models.models.segmentation.deeplab",
         "pytorch_models.models.ssl_features",
         "pytorch_models.models.classification",
+        "pytorch_models.models.survival",
     ],
     url="https://github.com/tsikup/pytorch_models",
     license="MIT",
