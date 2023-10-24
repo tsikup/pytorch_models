@@ -11,24 +11,23 @@ Continuous Time Survival
 #######################
 # Functional Survival #
 #######################
-def coxloss(survtime, censor, hazard_pred, device):
+def coxloss(survtime, censor, hazard_pred):
     """
     The loss functions requires batched input to work properly (i.e. batch size > 1)
     :param survtime:
     :param censor:
     :param hazard_pred:
-    :param device:
     :return:
     """
     # This calculation credit to Travers Ching https://github.com/traversc/cox-nnet
     # Cox-nnet: An artificial neural network method for prognosis prediction of high-throughput omics data
     current_batch_len = len(survtime)
-    R_mat = torch.zeros(size=[current_batch_len, current_batch_len], dtype=torch.int8)
+    R_mat = torch.zeros(size=[current_batch_len, current_batch_len], dtype=torch.float)
     for i in range(current_batch_len):
         for j in range(current_batch_len):
             R_mat[i, j] = survtime[j] >= survtime[i]
 
-    R_mat = torch.FloatTensor(R_mat).to(device)
+    R_mat = torch.FloatTensor(R_mat).to(hazard_pred.device)
     censor = censor.reshape(-1)
     theta = hazard_pred.reshape(-1)
     exp_theta = torch.exp(theta)
@@ -56,7 +55,9 @@ def accuracy_cox(hazardsdata, labels, threshold="median", is_update=False):
         threshold = torch.mean(hazardsdata)
     else:
         assert isinstance(threshold, float)
-    hazards_dichotomize = torch.zeros([len(hazardsdata)], dtype=torch.int8)
+    hazards_dichotomize = torch.zeros([len(hazardsdata)], dtype=torch.uint8).to(
+        hazardsdata.device
+    )
     hazards_dichotomize[hazardsdata > threshold] = 1
     correct = torch.sum(hazards_dichotomize == labels)
     if is_update:
@@ -342,4 +343,4 @@ class CoxSurvLoss(object):
     """
 
     def __call__(self, hazards, survtimes, censors, **kwargs):
-        return coxloss(survtimes, censors, hazards, hazards.device)
+        return coxloss(survtimes, censors, hazards)
