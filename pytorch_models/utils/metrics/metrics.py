@@ -38,7 +38,8 @@ def get_metrics(
 
 
 def get_survival_metrics():
-    metrics = MetricCollection([CIndex(), CoxLogRank(), AccuracyCox()])
+    # metrics = MetricCollection([CIndex(), CoxLogRank(), AccuracyCox()])
+    metrics = MetricCollection([CIndex(), AccuracyCox()])
     return metrics
 
 
