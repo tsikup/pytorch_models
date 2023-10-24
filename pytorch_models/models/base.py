@@ -540,6 +540,7 @@ class BaseMILSurvModel(BaseModel):
             prog_bar=True,
             logger=True,
             sync_dist=sync_dist,
+            batch_size=self.batch_size,
         )
 
     def training_step(self, batch, batch_idx):
