@@ -544,53 +544,53 @@ class BaseMILSurvModel(BaseModel):
 
     def training_step(self, batch, batch_idx):
         output = self.forward(batch)
-        censors, survtimes, preds, loss = (
-            output["censors"],
-            output["survtimes"],
+        censor, survtime, preds, loss = (
+            output["censor"],
+            output["survtime"],
             output["preds"],
             output["loss"],
         )
-        self._log_metrics(preds, censors, survtimes, loss, "train")
+        self._log_metrics(preds, censor, survtime, loss, "train")
         return {
             "loss": loss,
             "preds": preds,
-            "censors": censors,
-            "survtimes": survtimes,
+            "censor": censor,
+            "survtime": survtime,
         }
 
     def validation_step(self, batch, batch_idx):
         output = self.forward(batch)
-        censors, survtimes, preds, loss = (
-            output["censors"],
-            output["survtimes"],
+        censor, survtime, preds, loss = (
+            output["censor"],
+            output["survtime"],
             output["preds"],
             output["loss"],
         )
-        self._log_metrics(preds, censors, survtimes, loss, "val")
+        self._log_metrics(preds, censor, survtime, loss, "val")
         return {
             "val_loss": loss,
             "val_preds": preds,
-            "val_censor": censors,
-            "val_survtime": survtimes,
+            "val_censor": censor,
+            "val_survtime": survtime,
         }
 
     def test_step(self, batch, batch_idx):
         output = self.forward(batch)
 
-        censors, survtimes, preds, loss = (
-            output["censors"],
-            output["survtimes"],
+        censor, survtime, preds, loss = (
+            output["censor"],
+            output["survtime"],
             output["preds"],
             output["loss"],
         )
 
-        self._log_metrics(preds, censors, survtimes, loss, "test")
+        self._log_metrics(preds, censor, survtime, loss, "test")
 
         return {
             "test_loss": loss,
             "test_preds": preds,
-            "censor": censors,
-            "survtime": survtimes,
+            "censor": censor,
+            "survtime": survtime,
         }
 
     def predict_step(self, batch, batch_idx):

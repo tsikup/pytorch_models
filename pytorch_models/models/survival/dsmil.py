@@ -38,52 +38,16 @@ class DSMIL_PL_Surv(BaseMILSurvModel):
             passing_v=passing_v,
         )
 
-    def forward(self, batch, is_predict=False):
-        # Batch
-        features, censors, survtimes = (
-            batch["features"],
-            batch["censor"],
-            batch["survtime"],
-        )
-        # Prediction
-        classes, logits, A, B = self._forward(features)
-        # Loss (on logits)
-        loss_cox = coxloss(survtimes, censors, logits, logits.device)
-        loss_reg = self.l1_regularisation()
-        if hasattr(self, "lambda_reg"):
-            loss = loss_cox + self.lambda_reg * loss_reg
-        else:
-            loss = loss_cox
-
-        return {
-            "censors": censors,
-            "survtimes": survtimes,
-            "preds": logits,
-            "loss": loss,
-            "slide_name": batch["slide_name"],
-        }
-
     def _forward(self, features_batch: List[Dict[str, torch.Tensor]]):
-        classes = []
         logits = []
-        A = []
-        B = []
         for features in features_batch:
             h: List[torch.Tensor] = [features[key] for key in features]
             h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
-            _classes, _logits, _A, _B = self.model(h)
-            classes += [_classes.squeeze()]
+            _, _logits, _, _ = self.model(h)
             logits += [_logits.squeeze()]
-            A += [_A.squeeze()]
-            B += [_B.squeeze()]
-        return (
-            torch.stack(classes, dim=0),
-            torch.stack(logits, dim=0).unsqueeze(dim=1),
-            torch.stack(A, dim=0),
-            torch.stack(B, dim=0),
-        )
+        return torch.stack(logits, dim=0).unsqueeze(dim=1)
 
 
 if __name__ == "__main__":
