@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 from lifelines.statistics import logrank_test
 from lifelines.utils import concordance_index
@@ -24,7 +23,7 @@ def coxloss(survtime, censor, hazard_pred, device):
     # This calculation credit to Travers Ching https://github.com/traversc/cox-nnet
     # Cox-nnet: An artificial neural network method for prognosis prediction of high-throughput omics data
     current_batch_len = len(survtime)
-    R_mat = np.zeros([current_batch_len, current_batch_len], dtype=int)
+    R_mat = torch.zeros(size=[current_batch_len, current_batch_len], dtype=torch.int8)
     for i in range(current_batch_len):
         for j in range(current_batch_len):
             R_mat[i, j] = survtime[j] >= survtime[i]
@@ -52,9 +51,9 @@ def accuracy(output, labels, is_update=False):
 def accuracy_cox(hazardsdata, labels, threshold="median", is_update=False):
     # This accuracy is based on estimated survival events against true survival events
     if threshold == "median":
-        threshold = np.median(hazardsdata)
+        threshold = torch.median(hazardsdata)
     elif threshold == "mean":
-        threshold = np.mean(hazardsdata)
+        threshold = torch.mean(hazardsdata)
     else:
         assert isinstance(threshold, float)
     hazards_dichotomize = torch.zeros([len(hazardsdata)], dtype=torch.int8)
@@ -69,9 +68,9 @@ def cox_log_rank(
     hazardsdata, labels, survtime_all, threshold="median", is_update=False
 ):
     if threshold == "median":
-        threshold = np.median(hazardsdata)
+        threshold = torch.median(hazardsdata)
     elif threshold == "mean":
-        threshold = np.mean(hazardsdata)
+        threshold = torch.mean(hazardsdata)
     else:
         assert isinstance(threshold, float)
     hazards_dichotomize = torch.zeros([len(hazardsdata)], dtype=torch.uint8)
