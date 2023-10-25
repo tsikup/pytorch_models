@@ -1,50 +1,91 @@
 from typing import Dict, List, Tuple, Union
 
 import torch
+from dotmap import DotMap
 from pytorch_models.models.base import BaseMILSurvModel
-from pytorch_models.models.classification.dsmil import DSMIL
+from pytorch_models.models.classification.dtfd import DTFD
 from pytorch_models.utils.tensor import aggregate_features
 
 
-class DSMIL_PL_Surv(BaseMILSurvModel):
+class DTFD_PL_Surv(BaseMILSurvModel):
     def __init__(
         self,
-        config,
-        size: Union[List[int], Tuple[int, int]] = (384, 128),
-        n_classes=1,
-        dropout=0.0,
-        nonlinear=True,
-        passing_v=False,
+        config: DotMap,
+        n_classes: int,
+        size: Union[List[int], Tuple[int, int]] = None,
+        K: int = 1,
+        n_bags=3,
+        dropout=0.25,
         multires_aggregation: Union[None, str] = None,
         l1_reg_weight: float = 3e-4,
     ):
-        self.multires_aggregation = multires_aggregation
-        super(DSMIL_PL_Surv, self).__init__(config, n_classes=n_classes)
+        super(DTFD_PL_Surv, self).__init__(config, n_classes=n_classes)
 
-        assert len(size) >= 2, "size must be a tuple with 2 or more elements"
-        assert (
-            self.n_classes == 1
-        ), "Survival model should have 1 output class (i.e. hazard)"
+        assert len(size) == 3, "size must be a tuple of size 3"
+        assert self.n_classes == 1, "n_classes must be 1 for survival model"
+
+        self.multires_aggregation = multires_aggregation
+
         self.lambda_reg = l1_reg_weight
 
-        self.model = DSMIL(
+        self.model = DTFD(
             size=size,
             n_classes=self.n_classes,
+            K=K,
+            n_bags=n_bags,
             dropout=dropout,
-            nonlinear=nonlinear,
-            passing_v=passing_v,
         )
+
+    def forward(self, batch, is_predict=False):
+        # Batch
+        features, censor, survtime = (
+            batch["features"],
+            batch["censor"],
+            batch["survtime"],
+        )
+
+        # Prediction
+        logits, sub_logits = self._forward(
+            features
+        )  ### batch_size, batch_size x numGroup x fs
+
+        sub_censor = censor.repeat(1, sub_logits.shape[1]).reshape(
+            -1
+        )  ### batch_size x numGroup -> batch_size * numGroup x 1
+        sub_survtime = survtime.repeat(1, sub_logits.shape[1]).reshape(
+            -1
+        )  ### batch_size x numGroup -> batch_size * numGroup x 1
+        sub_logits = sub_logits.reshape(
+            -1
+        )  ### batch_size x numGroup -> batch_size * numGroup x 1
+
+        loss_cox = coxloss(survtime, censor, logits)
+        loss_cox += coxloss(sub_survtime, sub_censor, sub_logits)
+        if hasattr(self, "lambda_reg"):
+            loss = loss_cox + self.lambda_reg * self.l1_regularisation()
+        else:
+            loss = loss_cox
+
+        return {
+            "censor": censor.squeeze(),
+            "survtime": survtime.squeeze(),
+            "preds": logits.squeeze(),
+            "loss": loss,
+            "slide_name": batch["slide_name"],
+        }
 
     def _forward(self, features_batch: List[Dict[str, torch.Tensor]]):
         logits = []
+        sub_logits = []
         for features in features_batch:
             h: List[torch.Tensor] = [features[key] for key in features]
             h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
-            _, _logits, _, _ = self.model(h)
-            logits += [_logits.squeeze()]
-        return torch.stack(logits, dim=0).unsqueeze(dim=1)
+            _logits, _sub_logits = self.model.forward(h)
+            logits.append(_logits.squeeze())
+            sub_logits.append(torch.stack(_sub_logits).squeeze())
+        return torch.stack(logits), torch.stack(sub_logits)
 
 
 if __name__ == "__main__":
@@ -54,6 +95,7 @@ if __name__ == "__main__":
         CIndex,
         CoxLogRank,
         cindex_lifeline,
+        coxloss,
     )
 
     x = [
@@ -84,13 +126,10 @@ if __name__ == "__main__":
         }
     )
 
-    model = DSMIL_PL_Surv(
+    model = DTFD_PL_Surv(
         config=config,
-        size=(384, 128),
+        size=[384, 256, 128],
         n_classes=1,
-        dropout=0.5,
-        nonlinear=True,
-        passing_v=False,
         multires_aggregation="mean",
     )
 
@@ -106,4 +145,4 @@ if __name__ == "__main__":
     metric = CIndex()
     metric.update(out["preds"], out["censor"], out["survtime"])
     metric = metric.compute()
-    print(metric)
+    print(out)

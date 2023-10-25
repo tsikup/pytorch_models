@@ -1,39 +1,36 @@
 from typing import Dict, List, Tuple, Union
 
 import torch
+from dotmap import DotMap
 from pytorch_models.models.base import BaseMILSurvModel
-from pytorch_models.models.classification.dsmil import DSMIL
+from pytorch_models.models.classification.mamil import MultiAttentionMIL
 from pytorch_models.utils.tensor import aggregate_features
 
 
-class DSMIL_PL_Surv(BaseMILSurvModel):
+class MAMIL_PL_Surv(BaseMILSurvModel):
     def __init__(
         self,
-        config,
-        size: Union[List[int], Tuple[int, int]] = (384, 128),
-        n_classes=1,
-        dropout=0.0,
-        nonlinear=True,
-        passing_v=False,
+        config: DotMap,
+        n_classes: int,
+        size: Union[List[int], Tuple[int, int]] = None,
+        dropout: bool = True,
         multires_aggregation: Union[None, str] = None,
         l1_reg_weight: float = 3e-4,
     ):
-        self.multires_aggregation = multires_aggregation
-        super(DSMIL_PL_Surv, self).__init__(config, n_classes=n_classes)
-
-        assert len(size) >= 2, "size must be a tuple with 2 or more elements"
+        super(MAMIL_PL_Surv, self).__init__(config, n_classes=n_classes)
+        assert (
+            len(size) >= 2
+        ), "size must be a tuple of (n_features, layer1_size, layer2_size, ...)"
         assert (
             self.n_classes == 1
         ), "Survival model should have 1 output class (i.e. hazard)"
+
+        self.multires_aggregation = multires_aggregation
+        self.dropout = dropout
+
         self.lambda_reg = l1_reg_weight
 
-        self.model = DSMIL(
-            size=size,
-            n_classes=self.n_classes,
-            dropout=dropout,
-            nonlinear=nonlinear,
-            passing_v=passing_v,
-        )
+        self.model = MultiAttentionMIL(self.n_classes, size, use_dropout=self.dropout)
 
     def _forward(self, features_batch: List[Dict[str, torch.Tensor]]):
         logits = []
@@ -42,9 +39,8 @@ class DSMIL_PL_Surv(BaseMILSurvModel):
             h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
-            _, _logits, _, _ = self.model(h)
-            logits += [_logits.squeeze()]
-        return torch.stack(logits, dim=0).unsqueeze(dim=1)
+            logits.append(self.model.forward(h)[0].squeeze(dim=1))
+        return torch.stack(logits)
 
 
 if __name__ == "__main__":
@@ -84,14 +80,11 @@ if __name__ == "__main__":
         }
     )
 
-    model = DSMIL_PL_Surv(
+    model = MAMIL_PL_Surv(
         config=config,
-        size=(384, 128),
+        size=[384, 256, 128],
         n_classes=1,
-        dropout=0.5,
-        nonlinear=True,
-        passing_v=False,
-        multires_aggregation="mean",
+        multires_aggregation=None,
     )
 
     # run model
@@ -106,4 +99,4 @@ if __name__ == "__main__":
     metric = CIndex()
     metric.update(out["preds"], out["censor"], out["survtime"])
     metric = metric.compute()
-    print(metric)
+    print(out)

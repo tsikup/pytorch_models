@@ -489,9 +489,8 @@ class BaseMILSurvModel(BaseModel):
         logits = self._forward(features)
         # Loss (on logits)
         loss_cox = coxloss(survtime, censor, logits)
-        loss_reg = self.l1_regularisation()
         if hasattr(self, "lambda_reg"):
-            loss = loss_cox + self.lambda_reg * loss_reg
+            loss = loss_cox + self.lambda_reg * self.l1_regularisation()
         else:
             loss = loss_cox
 

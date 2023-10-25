@@ -1,38 +1,52 @@
 from typing import Dict, List, Tuple, Union
 
 import torch
+from dotmap import DotMap
 from pytorch_models.models.base import BaseMILSurvModel
-from pytorch_models.models.classification.dsmil import DSMIL
+from pytorch_models.models.classification.mmil import MultipleMILTransformer
 from pytorch_models.utils.tensor import aggregate_features
 
 
-class DSMIL_PL_Surv(BaseMILSurvModel):
+class MMIL_PL_Surv(BaseMILSurvModel):
     def __init__(
         self,
-        config,
-        size: Union[List[int], Tuple[int, int]] = (384, 128),
-        n_classes=1,
-        dropout=0.0,
-        nonlinear=True,
-        passing_v=False,
+        config: DotMap,
+        n_classes: int,
+        size: Union[List[int], Tuple[int, int]] = None,
+        num_msg: int = 1,
+        num_subbags: int = 16,
+        mode: str = "random",
+        ape: bool = True,
+        num_layers: int = 2,
         multires_aggregation: Union[None, str] = None,
         l1_reg_weight: float = 3e-4,
     ):
         self.multires_aggregation = multires_aggregation
-        super(DSMIL_PL_Surv, self).__init__(config, n_classes=n_classes)
+        super(MMIL_PL_Surv, self).__init__(config, n_classes=n_classes)
 
-        assert len(size) >= 2, "size must be a tuple with 2 or more elements"
+        assert len(size) == 2, "size must be a tuple of size 2"
         assert (
             self.n_classes == 1
         ), "Survival model should have 1 output class (i.e. hazard)"
         self.lambda_reg = l1_reg_weight
 
-        self.model = DSMIL(
-            size=size,
+        self.size = size
+        self.num_msg = num_msg
+        self.num_subbags = num_subbags
+        self.grouping_mode = mode
+        self.ape = ape
+        self.num_layers = num_layers
+        self.multires_aggregation = multires_aggregation
+
+        self.model = MultipleMILTransformer(
+            in_chans=self.size[0],
+            embed_dim=self.size[1],
             n_classes=self.n_classes,
-            dropout=dropout,
-            nonlinear=nonlinear,
-            passing_v=passing_v,
+            num_msg=self.num_msg,
+            num_subbags=self.num_subbags,
+            mode=self.grouping_mode,
+            ape=self.ape,
+            num_layers=self.num_layers,
         )
 
     def _forward(self, features_batch: List[Dict[str, torch.Tensor]]):
@@ -40,11 +54,10 @@ class DSMIL_PL_Surv(BaseMILSurvModel):
         for features in features_batch:
             h: List[torch.Tensor] = [features[key] for key in features]
             h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
-            if len(h.shape) == 3:
-                h = h.squeeze(dim=0)
-            _, _logits, _, _ = self.model(h)
-            logits += [_logits.squeeze()]
-        return torch.stack(logits, dim=0).unsqueeze(dim=1)
+            if len(h.shape) == 2:
+                h = h.unsqueeze(dim=0)
+            logits.append(self.model.forward(h)[0].squeeze(dim=1))
+        return torch.stack(logits)
 
 
 if __name__ == "__main__":
@@ -84,13 +97,10 @@ if __name__ == "__main__":
         }
     )
 
-    model = DSMIL_PL_Surv(
+    model = MMIL_PL_Surv(
         config=config,
-        size=(384, 128),
+        size=[384, 128],
         n_classes=1,
-        dropout=0.5,
-        nonlinear=True,
-        passing_v=False,
         multires_aggregation="mean",
     )
 

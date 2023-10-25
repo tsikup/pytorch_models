@@ -2,49 +2,36 @@ from typing import Dict, List, Tuple, Union
 
 import torch
 from pytorch_models.models.base import BaseMILSurvModel
-from pytorch_models.models.classification.dsmil import DSMIL
+from pytorch_models.models.classification.transmil import TransMIL
 from pytorch_models.utils.tensor import aggregate_features
 
 
-class DSMIL_PL_Surv(BaseMILSurvModel):
+class TransMIL_Features_PL_Surv(BaseMILSurvModel):
     def __init__(
         self,
         config,
-        size: Union[List[int], Tuple[int, int]] = (384, 128),
-        n_classes=1,
-        dropout=0.0,
-        nonlinear=True,
-        passing_v=False,
-        multires_aggregation: Union[None, str] = None,
+        n_classes,
+        size=(1024, 512),
+        multires_aggregation=None,
         l1_reg_weight: float = 3e-4,
     ):
         self.multires_aggregation = multires_aggregation
-        super(DSMIL_PL_Surv, self).__init__(config, n_classes=n_classes)
+        super(TransMIL_Features_PL_Surv, self).__init__(config, n_classes=n_classes)
 
-        assert len(size) >= 2, "size must be a tuple with 2 or more elements"
         assert (
             self.n_classes == 1
         ), "Survival model should have 1 output class (i.e. hazard)"
         self.lambda_reg = l1_reg_weight
 
-        self.model = DSMIL(
-            size=size,
-            n_classes=self.n_classes,
-            dropout=dropout,
-            nonlinear=nonlinear,
-            passing_v=passing_v,
-        )
+        self.model = TransMIL(n_classes=n_classes, size=size)
 
     def _forward(self, features_batch: List[Dict[str, torch.Tensor]]):
         logits = []
         for features in features_batch:
-            h: List[torch.Tensor] = [features[key] for key in features]
-            h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
-            if len(h.shape) == 3:
-                h = h.squeeze(dim=0)
-            _, _logits, _, _ = self.model(h)
-            logits += [_logits.squeeze()]
-        return torch.stack(logits, dim=0).unsqueeze(dim=1)
+            h = [features[key] for key in features]
+            h = aggregate_features(h, method=self.multires_aggregation)
+            logits.append(self.model(h.unsqueeze(dim=0))["logits"].squeeze(dim=1))
+        return torch.stack(logits)
 
 
 if __name__ == "__main__":
@@ -84,13 +71,10 @@ if __name__ == "__main__":
         }
     )
 
-    model = DSMIL_PL_Surv(
+    model = TransMIL_Features_PL_Surv(
         config=config,
         size=(384, 128),
         n_classes=1,
-        dropout=0.5,
-        nonlinear=True,
-        passing_v=False,
         multires_aggregation="mean",
     )
 

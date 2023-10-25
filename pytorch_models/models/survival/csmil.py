@@ -1,50 +1,53 @@
 from typing import Dict, List, Tuple, Union
 
 import torch
+from dotmap import DotMap
 from pytorch_models.models.base import BaseMILSurvModel
-from pytorch_models.models.classification.dsmil import DSMIL
+from pytorch_models.models.classification.csmil import CSMIL
 from pytorch_models.utils.tensor import aggregate_features
 
 
-class DSMIL_PL_Surv(BaseMILSurvModel):
+class CSMIL_PL_Surv(BaseMILSurvModel):
     def __init__(
         self,
-        config,
-        size: Union[List[int], Tuple[int, int]] = (384, 128),
-        n_classes=1,
-        dropout=0.0,
-        nonlinear=True,
-        passing_v=False,
+        config: DotMap,
+        n_classes: int,
+        size: int = 1024,
+        cluster_num: int = 1,
         multires_aggregation: Union[None, str] = None,
         l1_reg_weight: float = 3e-4,
     ):
-        self.multires_aggregation = multires_aggregation
-        super(DSMIL_PL_Surv, self).__init__(config, n_classes=n_classes)
+        super(CSMIL_PL_Surv, self).__init__(config, n_classes=n_classes)
 
-        assert len(size) >= 2, "size must be a tuple with 2 or more elements"
         assert (
             self.n_classes == 1
         ), "Survival model should have 1 output class (i.e. hazard)"
+
+        self.multires_aggregation = multires_aggregation
+
         self.lambda_reg = l1_reg_weight
 
-        self.model = DSMIL(
-            size=size,
-            n_classes=self.n_classes,
-            dropout=dropout,
-            nonlinear=nonlinear,
-            passing_v=passing_v,
+        self.model = CSMIL(
+            cluster_num=cluster_num, feature_size=size, n_classes=self.n_classes
         )
 
     def _forward(self, features_batch: List[Dict[str, torch.Tensor]]):
         logits = []
         for features in features_batch:
-            h: List[torch.Tensor] = [features[key] for key in features]
-            h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
-            if len(h.shape) == 3:
-                h = h.squeeze(dim=0)
-            _, _logits, _, _ = self.model(h)
-            logits += [_logits.squeeze()]
-        return torch.stack(logits, dim=0).unsqueeze(dim=1)
+            h = [features[key] for key in features]
+            if self.multires_aggregation == "concat":
+                h = torch.stack(h, dim=-1)
+            else:
+                h: torch.Tensor = aggregate_features(
+                    h, method=self.multires_aggregation
+                )
+                h = h.unsqueeze(dim=-1)
+            h = h.unsqueeze(dim=-1)
+            if len(h.shape) == 4:
+                h = h.unsqueeze(dim=0)
+            # h -> [n_clusters, n_patches, n_features, n_resolutions, 1]
+            logits.append(self.model.forward(h)[0])
+        return torch.stack(logits).squeeze(dim=1)
 
 
 if __name__ == "__main__":
@@ -54,6 +57,7 @@ if __name__ == "__main__":
         CIndex,
         CoxLogRank,
         cindex_lifeline,
+        coxloss,
     )
 
     x = [
@@ -84,13 +88,10 @@ if __name__ == "__main__":
         }
     )
 
-    model = DSMIL_PL_Surv(
+    model = CSMIL_PL_Surv(
         config=config,
-        size=(384, 128),
         n_classes=1,
-        dropout=0.5,
-        nonlinear=True,
-        passing_v=False,
+        size=384,
         multires_aggregation="mean",
     )
 
@@ -106,4 +107,4 @@ if __name__ == "__main__":
     metric = CIndex()
     metric.update(out["preds"], out["censor"], out["survtime"])
     metric = metric.compute()
-    print(metric)
+    print(out)

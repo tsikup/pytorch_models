@@ -1,39 +1,61 @@
 from typing import Dict, List, Tuple, Union
 
 import torch
+from dotmap import DotMap
 from pytorch_models.models.base import BaseMILSurvModel
-from pytorch_models.models.classification.dsmil import DSMIL
+from pytorch_models.models.classification.minet import (
+    MI_Net_DS,
+    mi_NET,
+    MI_Net,
+    MI_Net_RC,
+)
 from pytorch_models.utils.tensor import aggregate_features
 
 
-class DSMIL_PL_Surv(BaseMILSurvModel):
+class MINet_PL_Surv(BaseMILSurvModel):
     def __init__(
         self,
-        config,
-        size: Union[List[int], Tuple[int, int]] = (384, 128),
-        n_classes=1,
-        dropout=0.0,
-        nonlinear=True,
-        passing_v=False,
+        config: DotMap,
+        n_classes: int,
+        size: Union[List[int], Tuple[int, int]] = None,
+        dropout: bool = True,
+        pooling_mode="max",
         multires_aggregation: Union[None, str] = None,
         l1_reg_weight: float = 3e-4,
     ):
         self.multires_aggregation = multires_aggregation
-        super(DSMIL_PL_Surv, self).__init__(config, n_classes=n_classes)
+        super(MINet_PL_Surv, self).__init__(config, n_classes=n_classes)
 
-        assert len(size) >= 2, "size must be a tuple with 2 or more elements"
         assert (
             self.n_classes == 1
         ), "Survival model should have 1 output class (i.e. hazard)"
         self.lambda_reg = l1_reg_weight
 
-        self.model = DSMIL(
-            size=size,
-            n_classes=self.n_classes,
-            dropout=dropout,
-            nonlinear=nonlinear,
-            passing_v=passing_v,
-        )
+        self.dropout = dropout
+        self.pooling_mode = pooling_mode
+        self.multires_aggregation = multires_aggregation
+
+        if self.config.model.classifier == "minet_naive":
+            raise NotImplementedError
+            assert len(size) == 4, "size must be a list of 4 integers"
+            self.model = mi_NET(
+                size=size, n_classes=self.n_classes, pooling_mode=self.pooling_mode
+            )
+        elif self.config.model.classifier == "minet":
+            assert len(size) == 4, "size must be a list of 4 integers"
+            self.model = MI_Net(
+                size=size, n_classes=self.n_classes, pooling_mode=self.pooling_mode
+            )
+        elif self.config.model.classifier == "minet_ds":
+            assert len(size) == 4, "size must be a list of 4 integers"
+            self.model = MI_Net_DS(
+                size=size, n_classes=self.n_classes, pooling_mode=self.pooling_mode
+            )
+        elif self.config.model.classifier == "minet_rc":
+            assert len(size) >= 2, "size must be a list of at least 2 integers"
+            self.model = MI_Net_RC(
+                size=size, n_classes=self.n_classes, pooling_mode=self.pooling_mode
+            )
 
     def _forward(self, features_batch: List[Dict[str, torch.Tensor]]):
         logits = []
@@ -42,9 +64,8 @@ class DSMIL_PL_Surv(BaseMILSurvModel):
             h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
-            _, _logits, _, _ = self.model(h)
-            logits += [_logits.squeeze()]
-        return torch.stack(logits, dim=0).unsqueeze(dim=1)
+            logits.append(self.model.forward(h)[1].squeeze(dim=1))
+        return torch.stack(logits, dim=0)
 
 
 if __name__ == "__main__":
@@ -65,8 +86,7 @@ if __name__ == "__main__":
     config = DotMap(
         {
             "num_classes": 1,
-            "model": {"input_shape": 384},
-            # "trainer.optimizer_params.lr"
+            "model": {"input_shape": 384, "classifier": "minet_ds"},
             "trainer": {
                 "optimizer_params": {"lr": 1e-3},
                 "batch_size": 1,
@@ -84,13 +104,10 @@ if __name__ == "__main__":
         }
     )
 
-    model = DSMIL_PL_Surv(
+    model = MINet_PL_Surv(
         config=config,
-        size=(384, 128),
+        size=[384, 256, 128, 64],
         n_classes=1,
-        dropout=0.5,
-        nonlinear=True,
-        passing_v=False,
         multires_aggregation="mean",
     )
 
