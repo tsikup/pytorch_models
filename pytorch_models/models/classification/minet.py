@@ -102,19 +102,16 @@ class ScorePooling(nn.Module):
         self.C = C
         self.fc = nn.Linear(D, C)
         if C == 1:
-            self.sigmoid = nn.Sigmoid()
+            self.act = nn.Sigmoid()
         elif C > 2:
-            self.softmax = nn.Softmax()
+            raise NotImplementedError
+            self.act = nn.Softmax()
         self.pooling_mode = pooling_mode
 
     def forward(self, x):
         x = self.fc(x)
-        if self.C == 1:
-            x = self.sigmoid(x)
-        elif self.C > 2:
-            x = self.softmax(x)
-            raise NotImplementedError
-        return choice_pooling(x, self.pooling_mode)
+        x = self.act(x)
+        return choice_pooling(x, self.pooling_mode), None
 
 
 class FeaturePooling(nn.Module):
@@ -124,19 +121,16 @@ class FeaturePooling(nn.Module):
         self.C = C
         self.fc = nn.Linear(D, C)
         if C == 1:
-            self.sigmoid = nn.Sigmoid()
+            self.act = nn.Sigmoid()
         elif C > 2:
-            self.softmax = nn.Softmax()
+            self.act = nn.Softmax()
         self.pooling_mode = pooling_mode
 
     def forward(self, x):
         x = choice_pooling(x, self.pooling_mode)
         x = self.fc(x)
-        if self.C == 1:
-            output = self.sigmoid(x)
-        elif self.C > 2:
-            output = self.softmax(x)
-        return output
+        output = self.act(x)
+        return output, x
 
 
 class RC_Block(nn.Module):
@@ -228,17 +222,19 @@ class MI_Net_DS(nn.Module):
     def forward(self, x):
         x1 = self.fc1(x)
         x1 = self.dropout1(x1)
-        output1 = self.fp1(x1)
+        preds1, logits1 = self.fp1(x1)
 
         x2 = self.fc2(x1)
         x2 = self.dropout2(x2)
-        output2 = self.fp2(x2)
+        preds2, logits2 = self.fp2(x2)
 
         x3 = self.fc3(x2)
         x3 = self.dropout3(x3)
-        output3 = self.fp3(x3)
+        preds3, logits3 = self.fp3(x3)
 
-        return torch.mean(torch.stack([output1, output2, output3], dim=-1), dim=-1)
+        return torch.mean(
+            torch.stack([preds1, preds2, preds3], dim=-1), dim=-1
+        ), torch.mean(torch.stack([logits1, logits2, logits3], dim=-1), dim=-1)
 
 
 class MI_Net_RC(nn.Module):
@@ -291,9 +287,8 @@ class MI_Net_RC(nn.Module):
 
         output = torch.sum(torch.stack([output1, output2, output3], dim=-1), dim=-1)
         output = self.fc(output)
-        output = self.act(output)
 
-        return output
+        return self.act(output), output
 
 
 class Log(nn.Module):
@@ -354,9 +349,10 @@ class MINet_PL(BaseMILModel):
         features, target = batch["features"], batch["labels"]
 
         # Prediction
-        preds = self._forward(features)
+        preds, logits = self._forward(features)
         preds = preds.squeeze(dim=1)
         target = target.squeeze(dim=1)
+        logits = logits.squeeze(dim=1)
 
         loss = None
         if not is_predict:
@@ -368,6 +364,7 @@ class MINet_PL(BaseMILModel):
         return {
             "target": target,
             "preds": preds,
+            "logits": logits,
             "loss": loss,
             "slide_name": batch["slide_name"],
         }

@@ -156,5 +156,5 @@ if __name__ == "__main__":
     _data = torch.randn((1, 6000, 1024))
     _model = TransMIL(n_classes=2)
     print(_model.eval())
-    _results_dict = _model(data=_data)
+    _results_dict = _model(_data)
     print(_results_dict)

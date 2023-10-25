@@ -219,7 +219,7 @@ class DTFD_PL(BaseMILModel):
 if __name__ == "__main__":
     # create test data and model
     n_features = 1024
-    n_classes = 3
+    n_classes = 1
     n_samples = 100
 
     loss = nn.CrossEntropyLoss()
@@ -237,7 +237,7 @@ if __name__ == "__main__":
     )
 
     # test forward
-    logits, sub_logits, preds = model.forward(features)
+    logits, sub_logits = model.forward(features)
 
     logits = logits.squeeze(dim=1)
     target = target.squeeze(dim=1)
