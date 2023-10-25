@@ -139,9 +139,13 @@ class CLAM_PL_Surv(BaseMILSurvModel):
                 attention_only=attention_only,
             )
             logits.append(_logits.squeeze()[1])
-            instance_loss.append(_results_dict["instance_loss"])
+            if instance_eval:
+                instance_loss.append(_results_dict["instance_loss"])
 
-        return torch.stack(logits), torch.mean(torch.stack(instance_loss))
+        if instance_eval:
+            return torch.stack(logits), torch.mean(torch.stack(instance_loss))
+        else:
+            return torch.stack(logits), None
 
 
 if __name__ == "__main__":
