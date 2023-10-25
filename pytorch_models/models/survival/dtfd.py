@@ -4,6 +4,7 @@ import torch
 from dotmap import DotMap
 from pytorch_models.models.base import BaseMILSurvModel
 from pytorch_models.models.classification.dtfd import DTFD
+from pytorch_models.utils.survival import coxloss
 from pytorch_models.utils.tensor import aggregate_features
 
 
@@ -95,7 +96,6 @@ if __name__ == "__main__":
         CIndex,
         CoxLogRank,
         cindex_lifeline,
-        coxloss,
     )
 
     x = [

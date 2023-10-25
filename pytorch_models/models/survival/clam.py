@@ -1,6 +1,7 @@
 from typing import Dict, List, Tuple, Union
 
 import torch
+from pytorch_models.utils.survival import coxloss
 from pytorch_models.models.base import BaseMILSurvModel
 from pytorch_models.models.classification.clam import CLAM_SB, CLAM_MB
 
@@ -149,7 +150,6 @@ if __name__ == "__main__":
         AccuracyCox,
         CIndex,
         cindex_lifeline,
-        coxloss,
     )
 
     x = [

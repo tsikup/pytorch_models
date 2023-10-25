@@ -57,7 +57,6 @@ if __name__ == "__main__":
         CIndex,
         CoxLogRank,
         cindex_lifeline,
-        coxloss,
     )
 
     x = [
