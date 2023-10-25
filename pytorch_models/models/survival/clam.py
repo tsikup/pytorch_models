@@ -88,6 +88,7 @@ class CLAM_PL_Surv(BaseMILSurvModel):
             return_features=False,
             attention_only=False,
         )
+        logits = logits.unsqueeze(1)
 
         loss = None
         if not is_predict:
@@ -103,9 +104,9 @@ class CLAM_PL_Surv(BaseMILSurvModel):
                 ) * loss + self.instance_loss_weight * instance_loss
 
         return {
-            "censor": censor.squeeze(),
+            "censor": censor,
             "preds": logits,
-            "survtime": survtime.squeeze(),
+            "survtime": survtime,
             "loss": loss,
             "slide_name": batch["slide_name"],
         }
