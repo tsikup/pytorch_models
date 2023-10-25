@@ -129,6 +129,9 @@ class AccuracyCox(Metric):
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
     def update(self, hazards: Tensor, censors: Tensor, survtimes: Tensor):
+        hazards = hazards.squeeze()
+        censors = censors.squeeze()
+        survtimes = survtimes.squeeze()
         assert hazards.shape == censors.shape == survtimes.shape
         hazards, censors, survtimes = (
             hazards.reshape(-1),
@@ -161,6 +164,9 @@ class CoxLogRank(Metric):
         self.add_state("T2", default=[], dist_reduce_fx="cat")
 
     def update(self, hazards: Tensor, censors: Tensor, survtimes: Tensor):
+        hazards = hazards.squeeze()
+        censors = censors.squeeze()
+        survtimes = survtimes.squeeze()
         assert hazards.shape == censors.shape == survtimes.shape
         hazards, censors, survtimes = (
             hazards.reshape(-1),
@@ -205,6 +211,9 @@ class CIndex(Metric):
         self.add_state("total", default=torch.tensor(0.0), dist_reduce_fx="sum")
 
     def update(self, hazards: Tensor, censors: Tensor, survtimes: Tensor):
+        hazards = hazards.squeeze()
+        censors = censors.squeeze()
+        survtimes = survtimes.squeeze()
         assert hazards.shape == censors.shape == survtimes.shape
         hazards, censors, survtimes = (
             hazards.reshape(-1),
