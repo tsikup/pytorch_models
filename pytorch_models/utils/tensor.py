@@ -6,6 +6,24 @@ import torchvision.transforms as T
 from torch import Tensor
 
 
+def kronecker_product_einsum_batched(A: torch.Tensor, B: torch.Tensor):
+    """
+    Batched Version of Kronecker Products
+    :param A: has shape (b, a, c) or (b, a)
+    :param B: has shape (b, k, p) or (b, k)
+    :return: (b, ak, cp) or (b, ak)
+    """
+    assert (A.dim() == 3 and B.dim() == 3) or (A.dim() == 2 and B.dim() == 2)
+
+    if A.dim() == 2:
+        res = torch.einsum("ba,bk->bak", A, B).view(A.size(0), A.size(1) * B.size(1))
+    elif A.dim() == 3:
+        res = torch.einsum("bac,bkp->bakcp", A, B).view(
+            A.size(0), A.size(1) * B.size(1), A.size(2) * B.size(2)
+        )
+    return res
+
+
 def aggregate_features(
     features: Union[List[torch.Tensor], Tuple[torch.Tensor]], method=None
 ):
@@ -36,6 +54,9 @@ def aggregate_features(
         h = [torch.exp(f) for f in features]
         h = torch.stack(h, dim=-1)
         h = torch.log(torch.mean(h, dim=-1, keepdim=True)).squeeze(-1)
+    elif method == "kron":
+        # h = torch.kron(*features)
+        h = kronecker_product_einsum_batched(*features)
     else:
         h = features[0]
     return h
