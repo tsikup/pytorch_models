@@ -18,7 +18,6 @@ class DTFD_PL_Surv(BaseMILSurvModel):
         n_bags=3,
         dropout=0.25,
         multires_aggregation: Union[None, str] = None,
-        l1_reg_weight: float = 3e-4,
     ):
         super(DTFD_PL_Surv, self).__init__(config, n_classes=n_classes)
 
@@ -26,8 +25,6 @@ class DTFD_PL_Surv(BaseMILSurvModel):
         assert self.n_classes == 1, "n_classes must be 1 for survival model"
 
         self.multires_aggregation = multires_aggregation
-
-        self.lambda_reg = l1_reg_weight
 
         self.model = DTFD(
             size=size,
@@ -60,12 +57,10 @@ class DTFD_PL_Surv(BaseMILSurvModel):
             -1
         )  ### batch_size x numGroup -> batch_size * numGroup x 1
 
-        loss_cox = coxloss(survtime, censor, logits)
-        loss_cox += coxloss(sub_survtime, sub_censor, sub_logits)
-        if hasattr(self, "lambda_reg"):
-            loss = loss_cox + self.lambda_reg * self.l1_regularisation()
-        else:
-            loss = loss_cox
+        loss = coxloss(survtime, censor, logits)
+        loss += coxloss(sub_survtime, sub_censor, sub_logits)
+        if self.lambda_l1_reg:
+            loss = loss + self.l1_regularisation(l_w=self.lambda_l1_reg)
 
         return {
             "censor": censor.squeeze(),

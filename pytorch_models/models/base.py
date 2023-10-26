@@ -63,6 +63,8 @@ class BaseModel(L.LightningModule):
         # Hyperparameters
         self.learning_rate = self.config.trainer.optimizer_params.lr
         self.batch_size = self.config.trainer.batch_size
+        self.l1_reg_weight = self.config.trainer.l1_reg_weight
+        self.l2_reg_weight = self.config.trainer.l2_reg_weight
 
         # Get Loss
         self.loss = get_loss(
@@ -130,6 +132,12 @@ class BaseModel(L.LightningModule):
         logits = self._forward(images)
         # Loss (on logits)
         loss = self.loss.forward(logits, target.float())
+
+        if self.lambda_l1_reg:
+            loss = loss + self.l1_regularisation(l_w=self.lambda_l1_reg)
+
+        if self.lambda_l2_reg:
+            loss = loss + self.l2_regularisation(l_w=self.lambda_l2_reg)
 
         # Sigmoid or Softmax activation
         if self.n_classes == 1:
@@ -488,11 +496,9 @@ class BaseMILSurvModel(BaseModel):
         # Prediction
         logits = self._forward(features)
         # Loss (on logits)
-        loss_cox = coxloss(survtime, censor, logits)
-        if hasattr(self, "lambda_reg"):
-            loss = loss_cox + self.lambda_reg * self.l1_regularisation()
-        else:
-            loss = loss_cox
+        loss = coxloss(survtime, censor, logits)
+        if self.lambda_l1_reg:
+            loss = loss + self.l1_regularisation(l_w=self.lambda_l1_reg)
 
         return {
             "censor": censor,

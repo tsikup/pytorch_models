@@ -15,7 +15,6 @@ class CSMIL_PL_Surv(BaseMILSurvModel):
         size: int = 1024,
         cluster_num: int = 1,
         multires_aggregation: Union[None, str] = None,
-        l1_reg_weight: float = 3e-4,
     ):
         super(CSMIL_PL_Surv, self).__init__(config, n_classes=n_classes)
 
@@ -24,8 +23,6 @@ class CSMIL_PL_Surv(BaseMILSurvModel):
         ), "Survival model should have 1 output class (i.e. hazard)"
 
         self.multires_aggregation = multires_aggregation
-
-        self.lambda_reg = l1_reg_weight
 
         self.model = CSMIL(
             cluster_num=cluster_num, feature_size=size, n_classes=self.n_classes

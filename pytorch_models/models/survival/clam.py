@@ -24,7 +24,6 @@ class CLAM_PL_Surv(BaseMILSurvModel):
         linear_feature: bool = False,
         attention_depth=None,
         classifier_depth=None,
-        l1_reg_weight: float = 3e-4,
     ):
         super(CLAM_PL_Surv, self).__init__(config, n_classes=n_classes)
 
@@ -40,8 +39,6 @@ class CLAM_PL_Surv(BaseMILSurvModel):
         self.attention_depth = attention_depth
         self.classifier_depth = classifier_depth
         self.linear_feature = linear_feature
-
-        self.lambda_reg = l1_reg_weight
 
         if not self.multibranch:
             self.model = CLAM_SB(
@@ -93,11 +90,9 @@ class CLAM_PL_Surv(BaseMILSurvModel):
         loss = None
         if not is_predict:
             # Loss (on logits)
-            loss_cox = coxloss(survtime, censor, logits)
-            if hasattr(self, "lambda_reg"):
-                loss = loss_cox + self.lambda_reg * self.l1_regularisation()
-            else:
-                loss = loss_cox
+            loss = coxloss(survtime, censor, logits)
+            if self.lambda_l1_reg:
+                loss = loss + self.l1_regularisation(self.lambda_l1_reg)
             if self.instance_eval:
                 loss = (
                     1 - self.instance_loss_weight

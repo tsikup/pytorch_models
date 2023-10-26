@@ -13,7 +13,6 @@ class TransMIL_Features_PL_Surv(BaseMILSurvModel):
         n_classes,
         size=(1024, 512),
         multires_aggregation=None,
-        l1_reg_weight: float = 3e-4,
     ):
         self.multires_aggregation = multires_aggregation
         super(TransMIL_Features_PL_Surv, self).__init__(config, n_classes=n_classes)
@@ -21,7 +20,6 @@ class TransMIL_Features_PL_Surv(BaseMILSurvModel):
         assert (
             self.n_classes == 1
         ), "Survival model should have 1 output class (i.e. hazard)"
-        self.lambda_reg = l1_reg_weight
 
         self.model = TransMIL(n_classes=n_classes, size=size)
 

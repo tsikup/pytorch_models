@@ -15,7 +15,6 @@ class MAMIL_PL_Surv(BaseMILSurvModel):
         size: Union[List[int], Tuple[int, int]] = None,
         dropout: bool = True,
         multires_aggregation: Union[None, str] = None,
-        l1_reg_weight: float = 3e-4,
     ):
         super(MAMIL_PL_Surv, self).__init__(config, n_classes=n_classes)
         assert (
@@ -27,8 +26,6 @@ class MAMIL_PL_Surv(BaseMILSurvModel):
 
         self.multires_aggregation = multires_aggregation
         self.dropout = dropout
-
-        self.lambda_reg = l1_reg_weight
 
         self.model = MultiAttentionMIL(self.n_classes, size, use_dropout=self.dropout)
 
