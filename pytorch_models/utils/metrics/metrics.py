@@ -209,9 +209,14 @@ def get_segmentation_metrics(config, n_classes, mode="train", dist_sync_on_step=
     if n_classes in [1, 2]:
         metrics = MetricCollection(
             [
-                Accuracy(num_classes=1),
+                Accuracy(
+                    task="binary",
+                    threshold=config.metrics.threshold,
+                    num_classes=1,
+                ),
                 Dice(num_classes=1),
-                JaccardIndex(num_classes=2),
+                # Dice(num_classes=1, ignore_index=0),
+                JaccardIndex(task="binary", num_classes=1),
             ]
         )
     else:
@@ -219,6 +224,7 @@ def get_segmentation_metrics(config, n_classes, mode="train", dist_sync_on_step=
             MetricCollection(
                 [
                     Accuracy(
+                        task="multiclass",
                         average="micro",
                         num_classes=n_classes,
                         dist_sync_on_step=dist_sync_on_step,
@@ -229,6 +235,7 @@ def get_segmentation_metrics(config, n_classes, mode="train", dist_sync_on_step=
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     JaccardIndex(
+                        task="multiclass",
                         average="micro",
                         num_classes=n_classes,
                         dist_sync_on_step=dist_sync_on_step,
@@ -239,6 +246,7 @@ def get_segmentation_metrics(config, n_classes, mode="train", dist_sync_on_step=
             MetricCollection(
                 [
                     Accuracy(
+                        task="multiclass",
                         average="macro",
                         num_classes=n_classes,
                         dist_sync_on_step=dist_sync_on_step,
@@ -249,6 +257,7 @@ def get_segmentation_metrics(config, n_classes, mode="train", dist_sync_on_step=
                         dist_sync_on_step=dist_sync_on_step,
                     ),
                     JaccardIndex(
+                        task="multiclass",
                         average="macro",
                         num_classes=n_classes,
                         dist_sync_on_step=dist_sync_on_step,
@@ -258,28 +267,30 @@ def get_segmentation_metrics(config, n_classes, mode="train", dist_sync_on_step=
             ),
         ]
 
-        if mode in ["eval", "test"]:
-            metrics.append(
-                MetricCollection(
-                    [
-                        Accuracy(
-                            average="none",
-                            num_classes=n_classes,
-                            dist_sync_on_step=dist_sync_on_step,
-                        ),
-                        Dice(
-                            average="none",
-                            num_classes=n_classes,
-                            dist_sync_on_step=dist_sync_on_step,
-                        ),
-                        JaccardIndex(
-                            average="none",
-                            num_classes=n_classes,
-                            dist_sync_on_step=dist_sync_on_step,
-                        ),
-                    ]
-                )
-            )
+        # if mode in ["eval", "test"]:
+        #     metrics.append(
+        #         MetricCollection(
+        #             [
+        #                 Accuracy(
+        #                     task="multiclass" if n_classes > 2 else "binary",
+        #                     average="none",
+        #                     num_classes=n_classes,
+        #                     dist_sync_on_step=dist_sync_on_step,
+        #                 ),
+        #                 Dice(
+        #                     average="none",
+        #                     num_classes=n_classes,
+        #                     dist_sync_on_step=dist_sync_on_step,
+        #                 ),
+        #                 JaccardIndex(
+        #                     task="multiclass" if n_classes > 2 else "binary",
+        #                     average="none",
+        #                     num_classes=n_classes,
+        #                     dist_sync_on_step=dist_sync_on_step,
+        #                 ),
+        #             ]
+        #         )
+        #     )
         metrics = MetricCollection(metrics)
 
     return metrics
