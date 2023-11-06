@@ -3,6 +3,7 @@ from typing import Any, Callable, List, Optional, Union
 import lightning as L
 import numpy as np
 import torch
+import torch.nn.functional as F
 from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
 from dotmap import DotMap
 from lightning.pytorch.core.optimizer import LightningOptimizer
@@ -58,7 +59,6 @@ class BaseModel(L.LightningModule):
         self.n_classes = n_classes
         self.in_channels = in_channels
         self.segmentation = segmentation
-        self.dim = self.config.model.input_shape
 
         # Hyperparameters
         self.learning_rate = self.config.trainer.optimizer_params.lr
@@ -131,13 +131,21 @@ class BaseModel(L.LightningModule):
         # Prediction
         logits = self._forward(images)
         # Loss (on logits)
-        loss = self.loss.forward(logits, target.float())
+        if len(target.shape) > 1 and self.n_classes > 1:
+            if target.shape[1] == 1:
+                target = target.squeeze(1)
+            else:
+                target = torch.argmax(target, dim=1)
+        if self.n_classes > 1:
+            loss = self.loss.forward(logits, target)
+        else:
+            loss = self.loss.forward(logits, target.float())
 
-        if self.lambda_l1_reg:
-            loss = loss + self.l1_regularisation(l_w=self.lambda_l1_reg)
+        if self.l1_reg_weight:
+            loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
 
-        if self.lambda_l2_reg:
-            loss = loss + self.l2_regularisation(l_w=self.lambda_l2_reg)
+        if self.l2_reg_weight:
+            loss = loss + self.l2_regularisation(l_w=self.l2_reg_weight)
 
         # Sigmoid or Softmax activation
         if self.n_classes == 1:
@@ -377,6 +385,66 @@ class BaseModel(L.LightningModule):
         )
 
 
+class BaseSegmentationModel(BaseModel):
+    def __init__(
+        self,
+        config: DotMap,
+        n_classes: int,
+        in_channels: int,
+        interpolate_output: bool = False,
+    ):
+        super(BaseSegmentationModel, self).__init__(
+            config, n_classes=n_classes, in_channels=in_channels, segmentation=True
+        )
+        self.interpolate_output = interpolate_output
+
+    def forward(self, batch, is_predict=False):
+        # Batch
+        images, target = batch
+        # Prediction
+        logits = self._forward(images)
+        # Loss (on logits)
+        if len(target.shape) == 4 and self.n_classes > 1:
+            if target.shape[1] == 1:
+                target = target.squeeze(1)
+            else:
+                target = torch.argmax(target, dim=1)
+        if self.n_classes > 1:
+            loss = self.loss.forward(logits, target)
+        else:
+            loss = self.loss.forward(logits, target.float())
+
+        if self.l1_reg_weight:
+            loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
+
+        if self.l2_reg_weight:
+            loss = loss + self.l2_regularisation(l_w=self.l2_reg_weight)
+
+        if self.interpolate_output:
+            preds = F.interpolate(
+                logits, (images.shape[-2], images.shape[-1]), mode="bilinear"
+            )
+        else:
+            preds = logits
+        if self.n_classes == 1:
+            preds = preds.sigmoid()
+            out = torch.where(preds > 0.5, 1, 0)
+        else:
+            preds = torch.nn.functional.softmax(preds, dim=1)
+            out = torch.argmax(preds, dim=1)
+        return {
+            "images": images,
+            "target": target,
+            "preds": preds,
+            "loss": loss,
+            "out": out,
+            "logits": logits,
+        }
+
+    def _forward(self, x):
+        raise NotImplementedError
+
+
 class BaseMILModel(BaseModel):
     def __init__(
         self,
@@ -447,14 +515,15 @@ class BaseMILModel(BaseModel):
         return output["preds"], batch["labels"], batch["slide_name"]
 
 
-class BaseMILSurvModel(BaseModel):
+class BaseSurvModel(BaseModel):
     def __init__(
         self,
         config: DotMap,
         n_classes: int,
+        in_channels: Union[int, None],
     ):
-        super(BaseMILSurvModel, self).__init__(
-            config, n_classes=n_classes, in_channels=None, segmentation=False
+        super(BaseSurvModel, self).__init__(
+            config, n_classes=n_classes, in_channels=in_channels, segmentation=False
         )
         self.loss = None
         del self.loss
@@ -497,8 +566,8 @@ class BaseMILSurvModel(BaseModel):
         logits = self._forward(features)
         # Loss (on logits)
         loss = coxloss(survtime, censor, logits)
-        if self.lambda_l1_reg:
-            loss = loss + self.l1_regularisation(l_w=self.lambda_l1_reg)
+        if self.l1_reg_weight:
+            loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
 
         return {
             "censor": censor,
@@ -602,6 +671,17 @@ class BaseMILSurvModel(BaseModel):
     def predict_step(self, batch, batch_idx):
         output = self.forward(batch, is_predict=True)
         return output
+
+
+class BaseMILSurvModel(BaseSurvModel):
+    def __init__(
+        self,
+        config: DotMap,
+        n_classes: int,
+    ):
+        super(BaseMILSurvModel, self).__init__(
+            config, n_classes=n_classes, in_channels=None
+        )
 
 
 class EnsembleInferenceModel(BaseModel):
