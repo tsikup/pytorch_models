@@ -91,8 +91,8 @@ class CLAM_PL_Surv(BaseMILSurvModel):
         if not is_predict:
             # Loss (on logits)
             loss = coxloss(survtime, censor, logits)
-            if self.lambda_l1_reg:
-                loss = loss + self.l1_regularisation(self.lambda_l1_reg)
+            if self.l1_reg_weight:
+                loss = loss + self.l1_regularisation(self.l1_reg_weight)
             if self.instance_eval:
                 loss = (
                     1 - self.instance_loss_weight

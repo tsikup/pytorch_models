@@ -59,8 +59,8 @@ class DTFD_PL_Surv(BaseMILSurvModel):
 
         loss = coxloss(survtime, censor, logits)
         loss += coxloss(sub_survtime, sub_censor, sub_logits)
-        if self.lambda_l1_reg:
-            loss = loss + self.l1_regularisation(l_w=self.lambda_l1_reg)
+        if self.l1_reg_weight:
+            loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
 
         return {
             "censor": censor.squeeze(),
