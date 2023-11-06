@@ -69,16 +69,14 @@ def weights_init_orthogonal(m, init_bias=False):
 def init_weights(
     net: Union[nn.Module, L.LightningModule], init_type="normal", init_bias=False
 ):
-    if init_bias:
-        raise NotImplementedError("init_bias is not implemented yet")
     if init_type == "normal":
-        net.apply(weights_init_normal)
+        net.apply(lambda m: weights_init_normal(m, init_bias))
     elif init_type == "xavier":
-        net.apply(weights_init_xavier)
+        net.apply(lambda m: weights_init_xavier(m, init_bias))
     elif init_type == "kaiming":
-        net.apply(weights_init_kaiming)
+        net.apply(lambda m: weights_init_kaiming(m, init_bias))
     elif init_type == "orthogonal":
-        net.apply(weights_init_orthogonal)
+        net.apply(lambda m: weights_init_orthogonal(m, init_bias))
     else:
         raise NotImplementedError(
             "initialization method [%s] is not implemented" % init_type
