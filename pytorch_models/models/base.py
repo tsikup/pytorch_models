@@ -7,6 +7,8 @@ import torch.nn.functional as F
 from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
 from dotmap import DotMap
 from lightning.pytorch.core.optimizer import LightningOptimizer
+from torchvision.transforms.functional import center_crop
+
 from pytorch_models.losses.losses import get_loss
 from pytorch_models.optim.lookahead import Lookahead
 from pytorch_models.optim.utils import get_warmup_factor
@@ -404,6 +406,8 @@ class BaseSegmentationModel(BaseModel):
         # Prediction
         logits = self._forward(images)
         # Loss (on logits)
+        if logits.shape[-2] < target.shape[-2]:
+            target = center_crop(target, logits.shape[-2:])
         if len(target.shape) == 4 and self.n_classes > 1:
             if target.shape[1] == 1:
                 target = target.squeeze(1)
