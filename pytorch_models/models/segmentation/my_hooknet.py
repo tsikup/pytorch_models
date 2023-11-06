@@ -261,8 +261,6 @@ class HookNetPL(BaseSegmentationModel):
         self,
         config: DotMap,
         n_classes: int,
-        input_shape: Union[Tuple[int, int], List[int]],
-        output_shape: Union[Tuple[int, int], List[int]],
         in_channels: int = 3,
         depth: int = 4,
         n_convs: int = 2,
@@ -281,9 +279,6 @@ class HookNetPL(BaseSegmentationModel):
             config,
             n_classes=n_classes,
             in_channels=in_channels,
-            input_shape=input_shape,
-            output_shape=output_shape,
-            segmentation=True,
         )
         if self.n_classes == 2:
             self.n_classes = 1
@@ -319,8 +314,6 @@ if __name__ == "__main__":
     config = DotMap(
         {
             "num_classes": 3,
-            "model": {"input_shape": (284, 284), "output_shape": (70, 70)},
-            # "trainer.optimizer_params.lr"
             "trainer": {
                 "optimizer_params": {"lr": 1e-3},
                 "batch_size": 1,
@@ -357,8 +350,6 @@ if __name__ == "__main__":
         config=config,
         n_classes=config.num_classes,
         in_channels=_in_channels,
-        input_shape=_input_shape,
-        output_shape=_output_shape,
     )
 
     out = model((images, target))
