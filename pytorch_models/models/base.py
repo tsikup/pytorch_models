@@ -67,6 +67,10 @@ class BaseModel(L.LightningModule):
         self.batch_size = self.config.trainer.batch_size
         self.l1_reg_weight = self.config.trainer.l1_reg_weight
         self.l2_reg_weight = self.config.trainer.l2_reg_weight
+        if self.l1_reg_weight:
+            self.l1_reg_weight = float(self.l1_reg_weight)
+        if self.l2_reg_weight:
+            self.l2_reg_weight = float(self.l2_reg_weight)
 
         # Get Loss
         self.loss = get_loss(
