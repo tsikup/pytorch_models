@@ -71,16 +71,16 @@ class CLAM_PL_Surv(BaseMILSurvModel):
 
     def forward(self, batch, is_predict=False):
         # Batch
-        features, censor, survtime = (
+        features, event, survtime = (
             batch["features"],
-            batch["censor"],
+            batch["event"],
             batch["survtime"],
         )
 
         # Prediction
         logits, instance_loss = self._forward(
             features_batch=features,
-            censor_batch=censor,
+            event_batch=event,
             instance_eval=self.instance_eval and not is_predict,
             return_features=False,
             attention_only=False,
@@ -90,7 +90,7 @@ class CLAM_PL_Surv(BaseMILSurvModel):
         loss = None
         if not is_predict:
             # Loss (on logits)
-            loss = coxloss(survtime, censor, logits)
+            loss = coxloss(survtime, event, logits)
             if self.l1_reg_weight:
                 loss = loss + self.l1_regularisation(self.l1_reg_weight)
             if self.instance_eval:
@@ -99,7 +99,7 @@ class CLAM_PL_Surv(BaseMILSurvModel):
                 ) * loss + self.instance_loss_weight * instance_loss
 
         return {
-            "censor": censor,
+            "event": event,
             "preds": logits,
             "survtime": survtime,
             "loss": loss,
@@ -109,7 +109,7 @@ class CLAM_PL_Surv(BaseMILSurvModel):
     def _forward(
         self,
         features_batch: List[Dict[str, torch.Tensor]],
-        censor_batch=None,
+        event_batch=None,
         instance_eval=False,
         return_features=False,
         attention_only=False,
@@ -128,7 +128,7 @@ class CLAM_PL_Surv(BaseMILSurvModel):
             _logits, _, _, _, _results_dict = self.model.forward(
                 h=h.squeeze(),
                 h_context=h_context.squeeze() if h_context is not None else None,
-                label=censor_batch[idx] if censor_batch is not None else None,
+                label=event_batch[idx] if event_batch is not None else None,
                 instance_eval=instance_eval,
                 return_features=return_features,
                 attention_only=attention_only,
@@ -157,7 +157,7 @@ if __name__ == "__main__":
         for _ in range(32)
     ]
     survtime = torch.rand(32, 1) * 100
-    censor = torch.randint(0, 2, (32, 1))
+    event = torch.randint(0, 2, (32, 1))
 
     config = DotMap(
         {
@@ -196,14 +196,14 @@ if __name__ == "__main__":
     # run model
     batch = {
         "features": x,
-        "censor": censor,
+        "event": event,
         "survtime": survtime,
         "slide_name": ["lol" for _ in range(32)],
     }
 
     out = model.forward(batch)
     metric = CIndex()
-    metric.update(out["preds"], out["censor"], out["survtime"])
+    metric.update(out["preds"], out["event"], out["survtime"])
     metric = metric.compute()
     print(out)
     print(metric)

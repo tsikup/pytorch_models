@@ -36,9 +36,9 @@ class DTFD_PL_Surv(BaseMILSurvModel):
 
     def forward(self, batch, is_predict=False):
         # Batch
-        features, censor, survtime = (
+        features, event, survtime = (
             batch["features"],
-            batch["censor"],
+            batch["event"],
             batch["survtime"],
         )
 
@@ -47,7 +47,7 @@ class DTFD_PL_Surv(BaseMILSurvModel):
             features
         )  ### batch_size, batch_size x numGroup x fs
 
-        sub_censor = censor.repeat(1, sub_logits.shape[1]).reshape(
+        sub_event = event.repeat(1, sub_logits.shape[1]).reshape(
             -1
         )  ### batch_size x numGroup -> batch_size * numGroup x 1
         sub_survtime = survtime.repeat(1, sub_logits.shape[1]).reshape(
@@ -57,13 +57,13 @@ class DTFD_PL_Surv(BaseMILSurvModel):
             -1
         )  ### batch_size x numGroup -> batch_size * numGroup x 1
 
-        loss = coxloss(survtime, censor, logits)
-        loss += coxloss(sub_survtime, sub_censor, sub_logits)
+        loss = coxloss(survtime, event, logits)
+        loss += coxloss(sub_survtime, sub_event, sub_logits)
         if self.l1_reg_weight:
             loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
 
         return {
-            "censor": censor.squeeze(),
+            "event": event.squeeze(),
             "survtime": survtime.squeeze(),
             "preds": logits.squeeze(),
             "loss": loss,
@@ -97,7 +97,7 @@ if __name__ == "__main__":
         {"target": torch.rand(100, 384), "x10": torch.rand(100, 384)} for _ in range(32)
     ]
     survtime = torch.rand(32, 1) * 100
-    censor = torch.randint(0, 2, (32, 1))
+    event = torch.randint(0, 2, (32, 1))
 
     config = DotMap(
         {
@@ -131,13 +131,13 @@ if __name__ == "__main__":
     # run model
     batch = {
         "features": x,
-        "censor": censor,
+        "event": event,
         "survtime": survtime,
         "slide_name": ["lol" for _ in range(32)],
     }
 
     out = model.forward(batch)
     metric = CIndex()
-    metric.update(out["preds"], out["censor"], out["survtime"])
+    metric.update(out["preds"], out["event"], out["survtime"])
     metric = metric.compute()
     print(out)

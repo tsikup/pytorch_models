@@ -45,7 +45,7 @@ if __name__ == "__main__":
         {"target": torch.rand(100, 384), "x10": torch.rand(100, 384)} for _ in range(32)
     ]
     survtime = torch.rand(32, 1) * 100
-    censor = torch.randint(0, 2, (32, 1))
+    event = torch.randint(0, 2, (32, 1))
 
     config = DotMap(
         {
@@ -79,13 +79,13 @@ if __name__ == "__main__":
     # run model
     batch = {
         "features": x,
-        "censor": censor,
+        "event": event,
         "survtime": survtime,
         "slide_name": ["lol" for _ in range(32)],
     }
 
     out = model.forward(batch)
     metric = CIndex()
-    metric.update(out["preds"], out["censor"], out["survtime"])
+    metric.update(out["preds"], out["event"], out["survtime"])
     metric = metric.compute()
     print(metric)

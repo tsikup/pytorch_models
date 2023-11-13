@@ -561,20 +561,20 @@ class BaseSurvModel(BaseModel):
 
     def forward(self, batch, is_predict=False):
         # Batch
-        features, censor, survtime = (
+        features, event, survtime = (
             batch["features"],
-            batch["censor"],
+            batch["event"],
             batch["survtime"],
         )
         # Prediction
         logits = self._forward(features)
         # Loss (on logits)
-        loss = coxloss(survtime, censor, logits)
+        loss = coxloss(survtime, event, logits)
         if self.l1_reg_weight:
             loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
 
         return {
-            "censor": censor,
+            "event": event,
             "survtime": survtime,
             "preds": logits,
             "loss": loss,
@@ -584,16 +584,16 @@ class BaseSurvModel(BaseModel):
     def _forward(self, x):
         raise NotImplementedError
 
-    def _compute_metrics(self, hazards, censors, survtimes, mode):
+    def _compute_metrics(self, hazards, events, survtimes, mode):
         if mode == "val":
             metrics = self.val_metrics
         elif mode == "train":
             metrics = self.train_metrics
         elif mode in ["eval", "test"]:
             metrics = self.test_metrics
-        metrics(hazards, censors, survtimes)
+        metrics(hazards, events, survtimes)
 
-    def _log_metrics(self, hazards, censors, survtimes, loss, mode):
+    def _log_metrics(self, hazards, events, survtimes, loss, mode):
         on_step = False if mode != "train" else True
         # https://github.com/Lightning-AI/lightning/issues/13210
         sync_dist = self.sync_dist and (
@@ -606,7 +606,7 @@ class BaseSurvModel(BaseModel):
         elif mode == "test":
             metrics = self.test_metrics
 
-        self._compute_metrics(hazards, censors, survtimes, mode)
+        self._compute_metrics(hazards, events, survtimes, mode)
         self.log_dict(
             metrics, on_step=False, on_epoch=True, prog_bar=False, logger=True
         )
@@ -623,52 +623,52 @@ class BaseSurvModel(BaseModel):
 
     def training_step(self, batch, batch_idx):
         output = self.forward(batch)
-        censor, survtime, preds, loss = (
-            output["censor"],
+        event, survtime, preds, loss = (
+            output["event"],
             output["survtime"],
             output["preds"],
             output["loss"],
         )
-        self._log_metrics(preds, censor, survtime, loss, "train")
+        self._log_metrics(preds, event, survtime, loss, "train")
         return {
             "loss": loss,
             "preds": preds,
-            "censor": censor,
+            "event": event,
             "survtime": survtime,
         }
 
     def validation_step(self, batch, batch_idx):
         output = self.forward(batch)
-        censor, survtime, preds, loss = (
-            output["censor"],
+        event, survtime, preds, loss = (
+            output["event"],
             output["survtime"],
             output["preds"],
             output["loss"],
         )
-        self._log_metrics(preds, censor, survtime, loss, "val")
+        self._log_metrics(preds, event, survtime, loss, "val")
         return {
             "val_loss": loss,
             "val_preds": preds,
-            "val_censor": censor,
+            "val_event": event,
             "val_survtime": survtime,
         }
 
     def test_step(self, batch, batch_idx):
         output = self.forward(batch)
 
-        censor, survtime, preds, loss = (
-            output["censor"],
+        event, survtime, preds, loss = (
+            output["event"],
             output["survtime"],
             output["preds"],
             output["loss"],
         )
 
-        self._log_metrics(preds, censor, survtime, loss, "test")
+        self._log_metrics(preds, event, survtime, loss, "test")
 
         return {
             "test_loss": loss,
             "test_preds": preds,
-            "censor": censor,
+            "event": event,
             "survtime": survtime,
         }
 
