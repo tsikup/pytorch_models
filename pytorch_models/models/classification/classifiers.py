@@ -37,7 +37,7 @@ class NNClassifier(nn.Module):
         n_classes: int,
         depth: Union[int, None] = 4,
         activation: str = "relu",
-        dropout=True,
+        dropout=0.5,
     ):
         super(NNClassifier, self).__init__()
 
@@ -54,7 +54,6 @@ class NNClassifier(nn.Module):
                 features[d + 1]["out"] = in_features[d + 1]
             features[depth + 1] = dict()
             features[depth + 1]["in"] = in_features[-1]
-            features[depth + 1]["out"] = n_classes
         else:
             assert depth is not None
             for d in range(1, depth + 1):
@@ -64,9 +63,7 @@ class NNClassifier(nn.Module):
                 in_features = in_features // 2
             features[depth + 1] = dict()
             features[depth + 1]["in"] = in_features
-            features[depth + 1]["out"] = n_classes
 
-        print(features)
         for d in range(1, depth + 1):
             self.add_module(
                 name=f"linear_{d-1}",
@@ -78,11 +75,13 @@ class NNClassifier(nn.Module):
                 name=f"activation_{d-1}", module=ACTIVATION_FUNCTIONS[activation]()
             )
             if dropout:
-                self.add_module(name=f"dropout_{d-1}", module=nn.Dropout(p=0.5))
+                self.add_module(name=f"dropout_{d-1}", module=nn.Dropout(p=dropout))
 
-        self.add_module(
-            name="linear_out", module=nn.Linear(features[depth + 1]["in"], n_classes)
-        )
+        if n_classes is not None:
+            self.add_module(
+                name="linear_out",
+                module=nn.Linear(features[depth + 1]["in"], n_classes),
+            )
 
     def forward(self, x):
         y = x
