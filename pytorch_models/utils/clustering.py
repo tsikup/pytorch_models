@@ -84,7 +84,7 @@ class FeatureClustering:
         coords = coords.squeeze()
         if c_norm:
             coords = self.coords_nomlize(coords.float())
-        k = KMeans(n_clusters=self.groups_num, n_init="auto").fit(coords.cpu().numpy())
+        k = KMeans(n_clusters=self.groups_num).fit(coords.cpu().numpy())
         indices = self.indicer(k.labels_)
         features_group = self.make_subbags(indices, features)
 
@@ -92,7 +92,7 @@ class FeatureClustering:
 
     def embedding_grouping(self, features):
         features = features.squeeze()
-        k: KMeans = KMeans(n_clusters=self.groups_num, n_init="auto")
+        k: KMeans = KMeans(n_clusters=self.groups_num)
         k.fit(features.cpu().detach().numpy())
         indices = self.indicer(k.labels_)
         features_group = self.make_subbags(indices, features)
