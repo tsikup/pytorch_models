@@ -449,9 +449,6 @@ class BaseSegmentationModel(BaseModel):
             "logits": logits,
         }
 
-    def _forward(self, x):
-        raise NotImplementedError
-
 
 class BaseMILModel(BaseModel):
     def __init__(
@@ -481,9 +478,6 @@ class BaseMILModel(BaseModel):
             "loss": loss,
             "slide_name": batch["slide_name"],
         }
-
-    def _forward(self, x):
-        raise NotImplementedError
 
     def training_step(self, batch, batch_idx):
         output = self.forward(batch)
@@ -529,12 +523,14 @@ class BaseSurvModel(BaseModel):
         config: DotMap,
         n_classes: int,
         in_channels: Union[int, None],
+        loss_type="cox",
     ):
         super(BaseSurvModel, self).__init__(
             config, n_classes=n_classes, in_channels=in_channels, segmentation=False
         )
         self.loss = None
         del self.loss
+        self.loss_type = loss_type
 
         self.train_metrics = get_metrics(
             self.config,
@@ -563,29 +559,16 @@ class BaseSurvModel(BaseModel):
             survival=True,
         ).clone(prefix="test_")
 
+    def _coxloss(self, survtime, event, logits):
+        return coxloss(survtime, event, logits)
+
+    def compute_loss(self, survtime, event, logits):
+        if self.loss_type == "cox":
+            return self._coxloss(survtime, event, logits)
+        else:
+            raise NotImplementedError
+
     def forward(self, batch, is_predict=False):
-        # Batch
-        features, event, survtime = (
-            batch["features"],
-            batch["event"],
-            batch["survtime"],
-        )
-        # Prediction
-        logits = self._forward(features)
-        # Loss (on logits)
-        loss = coxloss(survtime, event, logits)
-        if self.l1_reg_weight:
-            loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
-
-        return {
-            "event": event,
-            "survtime": survtime,
-            "preds": logits,
-            "loss": loss,
-            "slide_name": batch["slide_name"],
-        }
-
-    def _forward(self, x):
         raise NotImplementedError
 
     def _compute_metrics(self, hazards, events, survtimes, mode):
@@ -686,10 +669,33 @@ class BaseMILSurvModel(BaseSurvModel):
         self,
         config: DotMap,
         n_classes: int,
+        loss_type="cox",
     ):
         super(BaseMILSurvModel, self).__init__(
-            config, n_classes=n_classes, in_channels=None
+            config, n_classes=n_classes, in_channels=None, loss_type=loss_type
         )
+
+    def forward(self, batch, is_predict=False):
+        # Batch
+        features, event, survtime = (
+            batch["features"],
+            batch["event"],
+            batch["survtime"],
+        )
+        # Prediction
+        logits = self._forward(features)
+        # Loss (on logits)
+        loss = self.compute_loss(survtime, event, logits)
+        if self.l1_reg_weight:
+            loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
+
+        return {
+            "event": event,
+            "survtime": survtime,
+            "preds": logits,
+            "loss": loss,
+            "slide_name": batch["slide_name"],
+        }
 
 
 class EnsembleInferenceModel(BaseModel):
