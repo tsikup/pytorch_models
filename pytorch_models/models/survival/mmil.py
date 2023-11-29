@@ -47,14 +47,43 @@ class MMIL_PL_Surv(BaseMILSurvModel):
             num_layers=self.num_layers,
         )
 
-    def _forward(self, features_batch: List[Dict[str, torch.Tensor]]):
+    def forward(self, batch, is_predict=False):
+        # Batch
+        features, event, survtime, coords = (
+            batch["features"],
+            batch["event"],
+            batch["survtime"],
+            None,
+        )
+        if self.grouping_mode == "coords":
+            coords = batch["coords"]
+        # Prediction
+        logits = self._forward(features, coords)
+        # Loss (on logits)
+        loss = self.compute_loss(survtime, event, logits)
+        if self.l1_reg_weight:
+            loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
+
+        return {
+            "event": event,
+            "survtime": survtime,
+            "preds": logits,
+            "loss": loss,
+            "slide_name": batch["slide_name"],
+        }
+
+    def _forward(
+        self,
+        features_batch: List[Dict[str, torch.Tensor]],
+        coords: List[torch.Tensor] = None,
+    ):
         logits = []
         for features in features_batch:
             h: List[torch.Tensor] = [features[key] for key in features]
             h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
             if len(h.shape) == 2:
                 h = h.unsqueeze(dim=0)
-            logits.append(self.model.forward(h)[0].squeeze(dim=1))
+            logits.append(self.model.forward(h, coords)[0].squeeze(dim=1))
         return torch.stack(logits)
 
 

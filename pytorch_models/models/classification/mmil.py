@@ -1,7 +1,7 @@
 # https://github.com/hustvl/MMIL-Transformer
 
 import random
-from typing import Union, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import torch
@@ -10,116 +10,9 @@ import torch.nn.functional as F
 from dotmap import DotMap
 from einops import rearrange
 from nystrom_attention import NystromAttention
-from sklearn.cluster import KMeans
-
 from pytorch_models.models.base import BaseMILModel
+from pytorch_models.utils.clustering import FeatureClustering, cat_msg2cluster_group
 from pytorch_models.utils.tensor import aggregate_features
-
-
-def cat_msg2cluster_group(x_groups, msg_tokens):
-    x_groups_cated = []
-    for x in x_groups:
-        x = x.unsqueeze(dim=0)
-        try:
-            temp = torch.cat((msg_tokens, x), dim=2)
-        except Exception as e:
-            print("Error when cat msg tokens to sub-bags")
-        x_groups_cated.append(temp)
-
-    return x_groups_cated
-
-
-def split_array(array, m):
-    n = len(array)
-    indices = np.random.choice(n, n, replace=False)
-    split_indices = np.array_split(indices, m)
-
-    result = []
-    for indices in split_indices:
-        result.append(array[indices])
-
-    return result
-
-
-class grouping:
-    def __init__(self, groups_num, max_size=1e10):
-        self.groups_num = groups_num
-        self.max_size = int(max_size)  # Max lenth 4300 for 24G RTX3090
-
-    def indicer(self, labels):
-        indices = []
-        groups_num = len(set(labels))
-        for i in range(groups_num):
-            temp = np.argwhere(labels == i).squeeze()
-            indices.append(temp)
-        return indices
-
-    def make_subbags(self, idx, features):
-        index = idx
-        features_group = []
-        for i in range(len(index)):
-            member_size = index[i].size
-            if member_size > self.max_size:
-                index[i] = np.random.choice(index[i], size=self.max_size, replace=False)
-            temp = features[index[i]]
-            temp = temp.unsqueeze(dim=0)
-            features_group.append(temp)
-
-        return features_group
-
-    def coords_nomlize(self, coords):
-        coords = coords.squeeze()
-        means = torch.mean(coords, 0)
-        xmean, ymean = means[0], means[1]
-        stds = torch.std(coords, 0)
-        xstd, ystd = stds[0], stds[1]
-        xcoords = (coords[:, 0] - xmean) / xstd
-        ycoords = (coords[:, 1] - ymean) / ystd
-        xcoords, ycoords = xcoords.view(xcoords.shape[0], 1), ycoords.view(
-            ycoords.shape[0], 1
-        )
-        coords = torch.cat((xcoords, ycoords), dim=1)
-
-        return coords
-
-    def coords_grouping(self, coords, features, c_norm=False):
-        features = features.squeeze()
-        coords = coords.squeeze()
-        if c_norm:
-            coords = self.coords_nomlize(coords.float())
-        features = features.squeeze()
-        k = KMeans(n_clusters=self.groups_num, random_state=0, n_init="auto").fit(
-            coords.cpu().numpy()
-        )
-        indices = self.indicer(k.labels_)
-
-        return indices
-
-    def embedding_grouping(self, features):
-        features = features.squeeze()
-        k = KMeans(n_clusters=self.groups_num, random_state=0, n_init="auto").fit(
-            features.cpu().detach().numpy()
-        )
-        indices = self.indicer(k.labels_)
-        features_group = self.make_subbags(indices, features)
-
-        return features_group
-
-    def random_grouping(self, features):
-        B, N, C = features.shape
-        features = features.squeeze()
-        indices = split_array(np.array(range(int(N))), self.groups_num)
-        features_group = self.make_subbags(indices, features)
-
-        return features_group
-
-    def seqential_grouping(self, features):
-        B, N, C = features.shape
-        features = features.squeeze()
-        indices = np.array_split(range(N), self.groups_num)
-        features_group = self.make_subbags(indices, features)
-
-        return features_group
 
 
 class Attention(nn.Module):
@@ -289,11 +182,13 @@ class MultipleMILTransformer(nn.Module):
         mode: str = "random",
         ape: bool = True,
         num_layers: int = 2,
+        max_size: int = int(5e4),
     ):
         super(MultipleMILTransformer, self).__init__()
 
         self.embed_dim = embed_dim
         self.ape = ape
+        self.mode = mode
 
         self.fc1 = nn.Linear(in_chans, embed_dim)
         self.fc2 = nn.Linear(embed_dim, n_classes)
@@ -301,7 +196,7 @@ class MultipleMILTransformer(nn.Module):
         self.msgcls_token = nn.Parameter(torch.randn(1, 1, 1, embed_dim))
         # ---> make sub-bags
         print("try to grouping seq to ", num_subbags)
-        self.grouping = grouping(num_subbags, max_size=4300)
+        self.grouping = FeatureClustering(num_subbags, max_size=max_size)
         if mode == "random":
             self.grouping_features = self.grouping.random_grouping
         elif mode == "coords":
@@ -310,6 +205,10 @@ class MultipleMILTransformer(nn.Module):
             self.grouping_features = self.grouping.seqential_grouping
         elif mode == "embed":
             self.grouping_features = self.grouping.embedding_grouping
+        else:
+            raise ValueError(
+                f"Grouping function requested (`{mode}`) should be one of [`random`, `coords`, `seq`, `embed`]"
+            )
 
         self.msg_tokens = nn.Parameter(torch.zeros(1, 1, 1, embed_dim))
         self.cat_msg2cluster_group = cat_msg2cluster_group
@@ -328,13 +227,20 @@ class MultipleMILTransformer(nn.Module):
         Y_prob = F.softmax(logits, dim=1)
         return logits, Y_prob, Y_hat
 
-    def forward(self, x, coords=False, mask_ratio=0):
+    def forward(self, x, coords=None, mask_ratio=0):
         # ---> init
         x = self.fc1(x)
         if self.ape:
             x = x + self.absolute_pos_embed.expand(1, x.shape[1], self.embed_dim)
 
-        x_groups = self.grouping_features(x)
+        if self.mode != "coords":
+            x_groups = self.grouping_features(x)
+        else:
+            assert (
+                coords is not None
+            ), "Centroid coordinates of each patch must be given, since clustering mode is `coords`"
+            x_groups = self.grouping_features(x, coords)
+
         msg_tokens = self.msg_tokens.expand(1, 1, self.msg_tokens_num, -1)
         msg_cls = self.msgcls_token
         x_groups = self.cat_msg2cluster_group(x_groups, msg_tokens)
@@ -395,10 +301,12 @@ class MMIL_PL(BaseMILModel):
 
     def forward(self, batch, is_predict=False):
         # Batch
-        features, target = batch["features"], batch["labels"]
+        features, target, coords = batch["features"], batch["labels"], None
+        if self.grouping_mode == "coords":
+            coords = batch["coords"]
 
         # Prediction
-        logits, preds, _ = self._forward(features)
+        logits, preds, _ = self._forward(features, coords)
 
         loss = None
         if not is_predict:
@@ -411,12 +319,12 @@ class MMIL_PL(BaseMILModel):
             "slide_name": batch["slide_name"],
         }
 
-    def _forward(self, features):
+    def _forward(self, features: Dict[str, torch.Tensor], coords: torch.Tensor = None):
         h: List[torch.Tensor] = [features[key] for key in features]
         h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
         if len(h.shape) == 2:
             h = h.unsqueeze(dim=0)
-        return self.model.forward(h)
+        return self.model.forward(h, coords)
 
     def _compute_metrics(self, preds, target, mode):
         if mode == "val":
@@ -441,11 +349,12 @@ if __name__ == "__main__":
 
     target = torch.from_numpy(np.array([[1]]))
     features = torch.rand(1, n_samples, n_features)
+    coords = torch.randint(0, 10, (n_samples, 2))
 
-    model = MultipleMILTransformer()
+    model = MultipleMILTransformer(mode="coords")
 
     # test forward
-    logits, preds, _ = model.forward(features)
+    logits, preds, _ = model.forward(features, coords)
 
     target = target.squeeze(dim=1)
 
