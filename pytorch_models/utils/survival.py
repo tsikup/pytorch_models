@@ -1,7 +1,8 @@
 import torch
 from lifelines.statistics import logrank_test
 from lifelines.utils import concordance_index
-from torch import Tensor
+from pycox.models.loss import DeepHitSingleLoss, nll_pmf, _Loss
+from torch import Tensor, nn
 from torchmetrics import Metric
 
 
@@ -11,11 +12,11 @@ Continuous Time Survival
 #######################
 # Functional Survival #
 #######################
-def coxloss(survtime, censor, hazard_pred):
+def coxloss(survtime, event, hazard_pred):
     """
     The loss functions requires batched input to work properly (i.e. batch size > 1)
     :param survtime:
-    :param censor:
+    :param event:
     :param hazard_pred:
     :return:
     """
@@ -28,13 +29,14 @@ def coxloss(survtime, censor, hazard_pred):
             R_mat[i, j] = survtime[j] >= survtime[i]
 
     R_mat = torch.FloatTensor(R_mat).to(hazard_pred.device)
-    censor = censor.reshape(-1)
+    event = event.reshape(-1)
     theta = hazard_pred.reshape(-1)
     exp_theta = torch.exp(theta)
-    loss_cox = (theta - torch.log(torch.sum(exp_theta * R_mat, dim=1))) * censor
+    loss_cox = (theta - torch.log(torch.sum(exp_theta * R_mat, dim=1))) * event
+    assert event.sum() > 0, "All samples are censored!"
     loss_cox = -(
-        loss_cox.sum() / censor.sum()
-    )  # mean over samples who experienced the event only (where censor==1)
+        loss_cox.sum() / event.sum()
+    )  # mean over samples who experienced the event only (where event==1)
     return loss_cox
 
 
@@ -119,7 +121,7 @@ class AccuracyCox(Metric):
     Accuracy for survival model
     :arg
         hazards: Tensor, shape (N,1) or (N); predicted hazards (logits)
-        censors: Tensor, shape (N,1) or (N); censoring status (0 or 1)
+        events: Tensor, shape (N,1) or (N); event status (0 or 1)
         survtimes: Tensor, shape (N,1) or (N); survival time
     """
 
@@ -128,18 +130,18 @@ class AccuracyCox(Metric):
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
-    def update(self, hazards: Tensor, censors: Tensor, survtimes: Tensor):
+    def update(self, hazards: Tensor, events: Tensor, survtimes: Tensor):
         hazards = hazards.squeeze()
-        censors = censors.squeeze()
+        events = events.squeeze()
         survtimes = survtimes.squeeze()
-        assert hazards.shape == censors.shape == survtimes.shape
-        hazards, censors, survtimes = (
+        assert hazards.shape == events.shape == survtimes.shape
+        hazards, events, survtimes = (
             hazards.reshape(-1),
-            censors.reshape(-1),
+            events.reshape(-1),
             survtimes.reshape(-1),
         )
 
-        _correct, _total = accuracy_cox(hazards, censors, is_update=True)
+        _correct, _total = accuracy_cox(hazards, events, is_update=True)
         self.correct += _correct
         self.total += _total
 
@@ -152,7 +154,7 @@ class CoxLogRank(Metric):
     Log-rank test for survival model
     :arg
         hazards: Tensor, shape (N,1) or (N); predicted hazards (logits)
-        censors: Tensor, shape (N,1) or (N); censoring status (0 or 1)
+        events: Tensor, shape (N,1) or (N); event status (0 or 1)
         survtimes: Tensor, shape (N,1) or (N); survival time
     """
 
@@ -163,18 +165,18 @@ class CoxLogRank(Metric):
         self.add_state("T1", default=[], dist_reduce_fx="cat")
         self.add_state("T2", default=[], dist_reduce_fx="cat")
 
-    def update(self, hazards: Tensor, censors: Tensor, survtimes: Tensor):
+    def update(self, hazards: Tensor, events: Tensor, survtimes: Tensor):
         hazards = hazards.squeeze()
-        censors = censors.squeeze()
+        events = events.squeeze()
         survtimes = survtimes.squeeze()
-        assert hazards.shape == censors.shape == survtimes.shape
-        hazards, censors, survtimes = (
+        assert hazards.shape == events.shape == survtimes.shape
+        hazards, events, survtimes = (
             hazards.reshape(-1),
-            censors.reshape(-1),
+            events.reshape(-1),
             survtimes.reshape(-1),
         )
 
-        E1, E2, T1, T2 = cox_log_rank(hazards, censors, survtimes, is_update=True)
+        E1, E2, T1, T2 = cox_log_rank(hazards, events, survtimes, is_update=True)
 
         assert isinstance(E1, list)
         self.E1 = self.E1 + E1
@@ -201,7 +203,7 @@ class CIndex(Metric):
     C-index for survival model
     :arg
         hazards: Tensor, shape (N,1) or (N); predicted hazards (logits)
-        censors: Tensor, shape (N,1) or (N); censoring status (0 or 1)
+        events: Tensor, shape (N,1) or (N); event status (0 or 1)
         survtimes: Tensor, shape (N,1) or (N); survival time
     """
 
@@ -210,18 +212,18 @@ class CIndex(Metric):
         self.add_state("concord", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0.0), dist_reduce_fx="sum")
 
-    def update(self, hazards: Tensor, censors: Tensor, survtimes: Tensor):
+    def update(self, hazards: Tensor, events: Tensor, survtimes: Tensor):
         hazards = hazards.squeeze()
-        censors = censors.squeeze()
+        events = events.squeeze()
         survtimes = survtimes.squeeze()
-        assert hazards.shape == censors.shape == survtimes.shape
-        hazards, censors, survtimes = (
+        assert hazards.shape == events.shape == survtimes.shape
+        hazards, events, survtimes = (
             hazards.reshape(-1),
-            censors.reshape(-1),
+            events.reshape(-1),
             survtimes.reshape(-1),
         )
 
-        _concord, _total = cindex(hazards, censors, survtimes, is_update=True)
+        _concord, _total = cindex(hazards, events, survtimes, is_update=True)
         self.concord += _concord
         self.total += _total
 
@@ -232,19 +234,22 @@ class CIndex(Metric):
 ##########################
 # Discrete Time Survival #
 ##########################
+# def continuous_to_discrete_time():
+
+
 def nll_loss(hazards, S, Y, c, alpha=0.4, eps=1e-7):
     """
     :param hazards: (N,K); hazards for each bin (K) in batch (N)
     :param S: (N,K); cumulative product of 1 - hazards, i.e. survival probability at each bin
     :param Y: (N,1); ground truth bin, 1,2,...,k; i.e. the bin where the event happened
-    :param c: (N,1); censorship status, 0 or 1
+    :param c: (N,1); eventship status, 0 or 1
     :param alpha:
     :param eps:
     :return:
     """
     batch_size = len(Y)
     Y = Y.view(batch_size, 1)  # ground truth bin, 1,2,...,k
-    c = c.view(batch_size, 1).float()  # censorship status, 0 or 1
+    c = c.view(batch_size, 1).float()  # eventship status, 0 or 1
     if S is None:
         S = torch.cumprod(
             1 - hazards, dim=1
@@ -272,14 +277,14 @@ def ce_loss(hazards, S, Y, c, alpha=0.4, eps=1e-7):
     :param hazards: (N,K); hazards for each bin (K) in batch (N)
     :param S: (N,K); cumulative product of 1 - hazards, i.e. survival probability at each bin
     :param Y: (N,1); ground truth bin, 1,2,...,k; i.e. the bin where the event happened
-    :param c: (N,1); censorship status, 0 or 1
+    :param c: (N,1); eventship status, 0 or 1
     :param alpha:
     :param eps:
     :return:
     """
     batch_size = len(Y)
     Y = Y.view(batch_size, 1)  # ground truth bin, 1,2,...,k
-    c = c.view(batch_size, 1).float()  # censorship status, 0 or 1
+    c = c.view(batch_size, 1).float()  # eventship status, 0 or 1
     if S is None:
         S = torch.cumprod(
             1 - hazards, dim=1
@@ -308,7 +313,7 @@ class CrossEntropySurvLoss(object):
         hazards: Tensor, shape (N,1); predicted hazards (logits)
         S: Tensor, shape (N,K); cumulative product of 1 - hazards, i.e. survival probability at each bin
         Y: Tensor, shape (N,1); ground truth bin, 1,2,...,k; i.e. the bin where the event happened
-        c: Tensor, shape (N,1); censoring status (0 or 1)
+        c: Tensor, shape (N,1); event status (0 or 1)
     """
 
     def __init__(self, alpha=0.15):
@@ -328,7 +333,7 @@ class NLLSurvLoss(object):
         hazards: Tensor, shape (N,1); predicted hazards (logits)
         S: Tensor, shape (N,K); cumulative product of 1 - hazards, i.e. survival probability at each bin
         Y: Tensor, shape (N,1); ground truth bin, 1,2,...,k; i.e. the bin where the event happened
-        c: Tensor, shape (N,1); censoring status (0 or 1)
+        c: Tensor, shape (N,1); event status (0 or 1)
     """
 
     def __init__(self, alpha=0.15):
@@ -347,9 +352,64 @@ class CoxSurvLoss(object):
     The loss functions requires batched input to work properly (i.e. batch size > 1)
     :arg
         hazards: Tensor, shape (N,1); predicted hazards (logits)
-        censors: Tensor, shape (N,1); censoring status (0 or 1)
+        events: Tensor, shape (N,1); event status (0 or 1)
         survtimes: Tensor, shape (N,1); survival time
     """
 
-    def __call__(self, hazards, survtimes, censors, **kwargs):
-        return coxloss(survtimes, censors, hazards)
+    def __call__(self, hazards, survtimes, events, **kwargs):
+        return coxloss(survtimes, events, hazards)
+
+
+class MyDeepHitLoss(nn.Module):
+    def __init__(self, alpha=0.5, sigma=1.0):
+        super().__init__()
+        self.loss = DeepHitSingleLoss(alpha=alpha, sigma=sigma)
+
+    def forward(self, survtimes, events, hazards, **kwargs):
+        raise NotImplementedError
+        rank_mat = None
+        return self.loss.forward(hazards, survtimes, events, rank_mat=rank_mat)
+
+
+################################################
+# Hybrid Continuous and Discrete Time Survival #
+################################################
+class HybridDeepHitLoss(_Loss):
+    """Hybrid DeepHit Loss (ranking loss on continuous time and nll on discrete time)
+    loss = alpha * nll + (1 - alpha) * rank_loss
+
+    Arguments:
+        alpha {float} -- Weighting between likelihood and rank loss.
+
+    Keyword Arguments:
+        reduction {string} -- How to reduce the loss.
+            'none': No reduction.
+            'mean': Mean of tensor.
+            'sum': sum.
+    """
+
+    def __init__(self, alpha: float, reduction: str = "mean") -> None:
+        super().__init__(reduction)
+        self.alpha = alpha
+
+    @property
+    def alpha(self) -> float:
+        return self._alpha
+
+    @alpha.setter
+    def alpha(self, alpha: float) -> None:
+        if (alpha < 0) or (alpha > 1):
+            raise ValueError(f"Need `alpha` to be in [0, 1]. Got {alpha}.")
+        self._alpha = alpha
+
+    def forward(
+        self,
+        hazards: Tensor,
+        idx_durations: Tensor,
+        survtimes: Tensor,
+        events: Tensor,
+        rank_mat: Tensor,
+    ) -> Tensor:
+        nll = nll_pmf(hazards, idx_durations, events, self.reduction)
+        rank_loss = coxloss(survtimes, events, hazards)
+        return self.alpha * nll + (1.0 - self.alpha) * rank_loss
