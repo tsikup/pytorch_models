@@ -496,10 +496,6 @@ class MINet_LNL_PL(BaseMILModel_LNL):
 
         # Prediction
         preds, preds_aux, _, _ = self._forward(features, is_adv)
-        preds = preds.squeeze(dim=1)
-        preds_aux = preds_aux.squeeze(dim=1)
-        target = target.squeeze(dim=1)
-        target_aux = target_aux.squeeze(dim=1)
 
         _loss = None
         _loss_aux_adv = None
@@ -509,18 +505,15 @@ class MINet_LNL_PL(BaseMILModel_LNL):
                 _loss = self.loss.forward(torch.log(preds), target)
             else:
                 _loss = self.loss.forward(preds.float(), target.float())
-            if len(preds_aux.shape) == 1 and preds_aux.shape[0] == 1:
-                _loss_aux_adv = preds_aux * torch.log(preds_aux)
-            else:
-                _loss_aux_adv = torch.mean(
-                    torch.sum(preds_aux * torch.log(preds_aux), 1)
-                )
+            _loss_aux_adv = torch.mean(torch.sum(preds_aux * torch.log(preds_aux), 1))
             loss = _loss + _loss_aux_adv * self.aux_lambda
         else:
             if self.n_classes_aux > 2:
-                _loss_aux_mi = self.loss.forward(torch.log(preds_aux), target_aux)
+                _loss_aux_mi = self.loss_aux.forward(torch.log(preds_aux), target_aux)
             else:
-                _loss_aux_mi = self.loss.forward(preds_aux.float(), target_aux.float())
+                _loss_aux_mi = self.loss_aux.forward(
+                    preds_aux.float(), target_aux.float()
+                )
             loss = _loss_aux_mi
 
         return {
@@ -534,11 +527,26 @@ class MINet_LNL_PL(BaseMILModel_LNL):
         }
 
     def _forward(self, features, is_adv=True):
-        h: List[torch.Tensor] = [features[key] for key in features]
-        h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
-        if len(h.shape) == 3:
-            h = h.squeeze(dim=0)
-        return self.model.forward(h, is_adv=is_adv)
+        preds = []
+        preds_aux = []
+        logits = []
+        logits_aux = []
+        for patientFeatures in features:
+            h: List[torch.Tensor] = [patientFeatures[key] for key in patientFeatures]
+            h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
+            if len(h.shape) == 3:
+                h = h.squeeze(dim=0)
+            o = self.model.forward(h, is_adv=is_adv)
+            preds.append(o[0])
+            preds_aux.append(o[1])
+            logits.append(o[2])
+            logits_aux.append(o[3])
+        return (
+            torch.vstack(preds),
+            torch.vstack(preds_aux),
+            torch.vstack(logits),
+            torch.vstack(logits_aux),
+        )
 
     def configure_optimizers(self):
         if not self.config.model.classifier == "minet_ds":
@@ -650,10 +658,15 @@ if __name__ == "__main__":
     )
 
     x = torch.rand(10, 384)
-    y = torch.randint(0, 2, [1, 1])
-    y_aux = torch.randint(0, 2, [1, 1])
+    y = torch.randint(0, 2, [32, 1])
+    y_aux = torch.randint(0, 2, [32, 1])
 
-    data = dict(features=dict(target=x), labels=y, labels_aux=y_aux, slide_name="tmp")
+    data = dict(
+        features=[dict(target=x) for _ in range(32)],
+        labels=y,
+        labels_aux=y_aux,
+        slide_name="tmp",
+    )
 
     model = MINet_LNL_PL(config, n_classes=1, n_classes_aux=1, size=[384, 256, 128, 64])
 
