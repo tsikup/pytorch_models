@@ -25,6 +25,8 @@ setup(
         "pytorch_models.models.ssl_features",
         "pytorch_models.models.classification",
         "pytorch_models.models.survival",
+        "pytorch_models.models.fair",
+        "pytorch_models.models.fair.lnl",
     ],
     url="https://github.com/tsikup/pytorch_models",
     license="MIT",
