@@ -391,6 +391,7 @@ class BaseModel(L.LightningModule):
             prog_bar=True,
             logger=True,
             sync_dist=sync_dist,
+            batch_size=self.batch_size,
         )
 
 
@@ -721,6 +722,7 @@ class BaseMILModel_LNL(BaseModel):
             prog_bar=True,
             logger=True,
             sync_dist=sync_dist,
+            batch_size=self.batch_size,
         )
         self.log(
             f"{mode}_main_loss",
@@ -730,6 +732,7 @@ class BaseMILModel_LNL(BaseModel):
             prog_bar=True,
             logger=True,
             sync_dist=sync_dist,
+            batch_size=self.batch_size,
         )
         self.log(
             f"{mode}_aux_adv_loss",
@@ -739,6 +742,7 @@ class BaseMILModel_LNL(BaseModel):
             prog_bar=True,
             logger=True,
             sync_dist=sync_dist,
+            batch_size=self.batch_size,
         )
         self.log(
             f"{mode}_aux_mi_loss",
@@ -748,6 +752,7 @@ class BaseMILModel_LNL(BaseModel):
             prog_bar=True,
             logger=True,
             sync_dist=sync_dist,
+            batch_size=self.batch_size,
         )
 
 
