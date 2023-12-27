@@ -14,7 +14,7 @@ from pytorch_models.losses.utils import JointLoss
 # https://github.com/JunMa11/SegWithDistMap
 def get_loss(
     config_losses,
-    n_classes: int,
+    n_classes: int = None,
     classes_loss_weights: List[int] = None,
     multi_loss_weights: List[int] = None,
     samples_per_cls: List[int] = None,
