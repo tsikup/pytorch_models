@@ -4,6 +4,7 @@ from pytorch_toolbelt import losses as L
 from balanced_loss import Loss as BalancedLoss
 from typing import List
 
+from pytorch_models.losses.fair import DemographicParityLoss
 from pytorch_models.losses.utils import JointLoss
 
 
@@ -13,6 +14,7 @@ from pytorch_models.losses.utils import JointLoss
 # https://github.com/JunMa11/SegWithDistMap
 def get_loss(
     config_losses,
+    n_classes: int,
     classes_loss_weights: List[int] = None,
     multi_loss_weights: List[int] = None,
     samples_per_cls: List[int] = None,
@@ -109,6 +111,10 @@ def get_loss(
                     class_balanced=True,
                 )
             )
+        elif loss in ["demographic_parity", "demo_parity"]:
+            _n_classes = n_classes if n_classes > 2 else 2
+            sensitive_classes = list(range(_n_classes))
+            losses.append(DemographicParityLoss(sensitive_classes=sensitive_classes))
         else:
             raise RuntimeError("No loss with that name.")
 

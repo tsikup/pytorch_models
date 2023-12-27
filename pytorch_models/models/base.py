@@ -78,6 +78,7 @@ class BaseModel(L.LightningModule):
         # Get Loss
         self.loss = get_loss(
             config_losses=config.trainer.loss,
+            n_classes=self.n_classes,
             classes_loss_weights=config.trainer.classes_loss_weights,
             multi_loss_weights=config.trainer.multi_loss_weights,
             samples_per_cls=config.trainer.samples_per_class,
