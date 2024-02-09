@@ -414,7 +414,14 @@ class MINet_PL(BaseMILModel):
         self.pooling_mode = pooling_mode
         self.multires_aggregation = multires_aggregation
 
-        self.model = get_minet_model(config, self.n_classes, size, pooling_mode)
+        self.model = get_minet_model(
+            config,
+            self.n_classes,
+            size,
+            pooling_mode,
+            return_features=False,
+            return_preds=True,
+        )
 
     def forward(self, batch, is_predict=False):
         # Batch

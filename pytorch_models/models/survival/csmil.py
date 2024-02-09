@@ -12,11 +12,14 @@ class CSMIL_PL_Surv(BaseMILSurvModel):
         self,
         config: DotMap,
         n_classes: int,
+        loss_type="cox",
         size: int = 1024,
         cluster_num: int = 1,
         multires_aggregation: Union[None, str] = None,
     ):
-        super(CSMIL_PL_Surv, self).__init__(config, n_classes=n_classes)
+        super(CSMIL_PL_Surv, self).__init__(
+            config, n_classes=n_classes, loss_type=loss_type, size=[size]
+        )
 
         assert (
             self.n_classes == 1
@@ -34,6 +37,14 @@ class CSMIL_PL_Surv(BaseMILSurvModel):
             h = [features[key] for key in features]
             if self.multires_aggregation == "concat":
                 h = torch.stack(h, dim=-1)
+            elif self.multires_aggregation == "bilinear":
+                assert len(h) == 2
+                h = self.bilinear(h[0], h[1])
+                h = h.unsqueeze(dim=-1)
+            elif self.multires_aggregation == "linear":
+                assert len(h) == 2
+                h = self.linear_agg_target(h[0]) + self.linear_agg_context(h[1])
+                h = h.unsqueeze(dim=-1)
             else:
                 h: torch.Tensor = aggregate_features(
                     h, method=self.multires_aggregation

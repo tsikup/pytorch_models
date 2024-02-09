@@ -13,13 +13,16 @@ class DTFD_PL_Surv(BaseMILSurvModel):
         self,
         config: DotMap,
         n_classes: int,
+        loss_type="cox",
         size: Union[List[int], Tuple[int, int]] = None,
         K: int = 1,
         n_bags=3,
         dropout=0.25,
         multires_aggregation: Union[None, str] = None,
     ):
-        super(DTFD_PL_Surv, self).__init__(config, n_classes=n_classes)
+        super(DTFD_PL_Surv, self).__init__(
+            config, n_classes=n_classes, loss_type=loss_type, size=size
+        )
 
         assert len(size) == 3, "size must be a tuple of size 3"
         assert self.n_classes == 1, "n_classes must be 1 for survival model"
@@ -57,8 +60,8 @@ class DTFD_PL_Surv(BaseMILSurvModel):
             -1
         )  ### batch_size x numGroup -> batch_size * numGroup x 1
 
-        loss = coxloss(survtime, event, logits)
-        loss += coxloss(sub_survtime, sub_event, sub_logits)
+        loss = self.compute_loss(survtime, event, logits)
+        loss += self.compute_loss(sub_survtime, sub_event, sub_logits)
         if self.l1_reg_weight:
             loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
 
@@ -75,69 +78,19 @@ class DTFD_PL_Surv(BaseMILSurvModel):
         sub_logits = []
         for features in features_batch:
             h: List[torch.Tensor] = [features[key] for key in features]
-            h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
+            if self.multires_aggregation == "bilinear":
+                assert len(h) == 2
+                h = self.bilinear(h[0], h[1])
+            elif self.multires_aggregation == "linear":
+                assert len(h) == 2
+                h = self.linear_agg_target(h[0]) + self.linear_agg_context(h[1])
+            else:
+                h: torch.Tensor = aggregate_features(
+                    h, method=self.multires_aggregation
+                )
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
             _logits, _sub_logits = self.model.forward(h)
             logits.append(_logits.squeeze())
             sub_logits.append(torch.stack(_sub_logits).squeeze())
         return torch.stack(logits), torch.stack(sub_logits)
-
-
-if __name__ == "__main__":
-    from dotmap import DotMap
-    from pytorch_models.utils.survival import (
-        AccuracyCox,
-        CIndex,
-        CoxLogRank,
-        cindex_lifeline,
-    )
-
-    x = [
-        {"target": torch.rand(100, 384), "x10": torch.rand(100, 384)} for _ in range(32)
-    ]
-    survtime = torch.rand(32, 1) * 100
-    event = torch.randint(0, 2, (32, 1))
-
-    config = DotMap(
-        {
-            "num_classes": 1,
-            "model": {"input_shape": 384},
-            # "trainer.optimizer_params.lr"
-            "trainer": {
-                "optimizer_params": {"lr": 1e-3},
-                "batch_size": 1,
-                "loss": ["ce"],
-                "classes_loss_weights": None,
-                "multi_loss_weights": None,
-                "samples_per_class": None,
-                "sync_dist": False,
-            },
-            "devices": {
-                "nodes": 1,
-                "gpus": 1,
-            },
-            "metrics": {"threshold": 0.5},
-        }
-    )
-
-    model = DTFD_PL_Surv(
-        config=config,
-        size=[384, 256, 128],
-        n_classes=1,
-        multires_aggregation="mean",
-    )
-
-    # run model
-    batch = {
-        "features": x,
-        "event": event,
-        "survtime": survtime,
-        "slide_name": ["lol" for _ in range(32)],
-    }
-
-    out = model.forward(batch)
-    metric = CIndex()
-    metric.update(out["preds"], out["event"], out["survtime"])
-    metric = metric.compute()
-    print(out)

@@ -1,7 +1,6 @@
 from typing import Dict, List, Tuple, Union
 
 import torch
-from pytorch_models.utils.survival import coxloss
 from pytorch_models.models.base import BaseMILSurvModel
 from pytorch_models.models.classification.clam import CLAM_SB, CLAM_MB
 
@@ -11,6 +10,7 @@ class CLAM_PL_Surv(BaseMILSurvModel):
         self,
         config,
         n_classes,
+        loss_type="cox",
         size=None,
         gate: bool = True,
         dropout=False,
@@ -25,7 +25,9 @@ class CLAM_PL_Surv(BaseMILSurvModel):
         attention_depth=None,
         classifier_depth=None,
     ):
-        super(CLAM_PL_Surv, self).__init__(config, n_classes=n_classes)
+        super(CLAM_PL_Surv, self).__init__(
+            config, n_classes=n_classes, loss_type=loss_type, size=size
+        )
 
         self.size = size
         self.dropout = dropout
@@ -90,7 +92,7 @@ class CLAM_PL_Surv(BaseMILSurvModel):
         loss = None
         if not is_predict:
             # Loss (on logits)
-            loss = coxloss(survtime, event, logits)
+            loss = self.compute_loss(survtime, event, logits)
             if self.l1_reg_weight:
                 loss = loss + self.l1_regularisation(self.l1_reg_weight)
             if self.instance_eval:

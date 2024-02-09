@@ -487,10 +487,16 @@ class BaseMILModel(BaseModel):
             config, n_classes=n_classes, in_channels=None, segmentation=False
         )
 
-        if self.multires_aggregation == "bilinear":
+        if (
+            self.config.model.classifier != "clam"
+            and self.multires_aggregation == "bilinear"
+        ):
             assert size is not None
             self.bilinear = nn.Bilinear(size[0], size[0], size[0])
-        elif self.multires_aggregation == "linear":
+        elif (
+            self.config.model.classifier != "clam"
+            and self.multires_aggregation == "linear"
+        ):
             assert size is not None
             self.linear_agg_target = nn.Linear(size[0], size[0])
             self.linear_agg_context = nn.Linear(size[0], size[0])
@@ -747,10 +753,25 @@ class BaseMILSurvModel(BaseSurvModel):
         config: DotMap,
         n_classes: int,
         loss_type="cox",
+        size: List[int] = None,
     ):
         super(BaseMILSurvModel, self).__init__(
             config, n_classes=n_classes, in_channels=None, loss_type=loss_type
         )
+
+        if (
+            self.config.model.classifier != "clam"
+            and self.multires_aggregation == "bilinear"
+        ):
+            assert size is not None
+            self.bilinear = nn.Bilinear(size[0], size[0], size[0])
+        elif (
+            self.config.model.classifier != "clam"
+            and self.multires_aggregation == "linear"
+        ):
+            assert size is not None
+            self.linear_agg_target = nn.Linear(size[0], size[0])
+            self.linear_agg_context = nn.Linear(size[0], size[0])
 
     def forward(self, batch, is_predict=False):
         # Batch
@@ -776,16 +797,26 @@ class BaseMILSurvModel(BaseSurvModel):
             "slide_name": batch["slide_name"],
         }
 
-    def _forward(self, features_batch: List[Dict[str, torch.Tensor]]):
+    def _forward(self, features_batch):
         logits = []
         for singlePatientFeatures in features_batch:
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
-            h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
+            if self.multires_aggregation == "bilinear":
+                assert len(h) == 2
+                h = self.bilinear(h[0], h[1])
+            elif self.multires_aggregation == "linear":
+                assert len(h) == 2
+                h = self.linear_agg_target(h[0]) + self.linear_agg_context(h[1])
+            else:
+                h: torch.Tensor = aggregate_features(
+                    h, method=self.multires_aggregation
+                )
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
-            logits.append(self.model.forward(h))
+            _logits = self.model.forward(h)
+            logits.append(_logits)
         return torch.vstack(logits)
 
 

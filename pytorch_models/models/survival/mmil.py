@@ -12,6 +12,7 @@ class MMIL_PL_Surv(BaseMILSurvModel):
         self,
         config: DotMap,
         n_classes: int,
+        loss_type="cox",
         size: Union[List[int], Tuple[int, int]] = None,
         num_msg: int = 1,
         num_subbags: int = 16,
@@ -21,7 +22,9 @@ class MMIL_PL_Surv(BaseMILSurvModel):
         multires_aggregation: Union[None, str] = None,
     ):
         self.multires_aggregation = multires_aggregation
-        super(MMIL_PL_Surv, self).__init__(config, n_classes=n_classes)
+        super(MMIL_PL_Surv, self).__init__(
+            config, n_classes=n_classes, loss_type=loss_type, size=size
+        )
 
         assert len(size) == 2, "size must be a tuple of size 2"
         assert (
@@ -75,15 +78,28 @@ class MMIL_PL_Surv(BaseMILSurvModel):
     def _forward(
         self,
         features_batch: List[Dict[str, torch.Tensor]],
-        coords: List[torch.Tensor] = None,
+        coords_batch: List[torch.Tensor] = None,
     ):
         logits = []
-        for features in features_batch:
+        for idx, features in enumerate(features_batch):
             h: List[torch.Tensor] = [features[key] for key in features]
-            h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
+            if self.multires_aggregation == "bilinear":
+                assert len(h) == 2
+                h = self.bilinear(h[0], h[1])
+            elif self.multires_aggregation == "linear":
+                assert len(h) == 2
+                h = self.linear_agg_target(h[0]) + self.linear_agg_context(h[1])
+            else:
+                h: torch.Tensor = aggregate_features(
+                    h, method=self.multires_aggregation
+                )
             if len(h.shape) == 2:
                 h = h.unsqueeze(dim=0)
-            logits.append(self.model.forward(h, coords)[0].squeeze(dim=1))
+            logits.append(
+                self.model.forward(h, coords_batch[idx] if coords_batch else None)[
+                    0
+                ].squeeze(dim=1)
+            )
         return torch.stack(logits)
 
 
