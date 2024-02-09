@@ -113,11 +113,12 @@ class MILNet(nn.Module):
         self.i_classifier = i_classifier
         self.b_classifier = b_classifier
 
-    def forward(self, x):
+    def forward(self, x, return_features=False):
         feats, classes = self.i_classifier(x)
-        prediction_bag, A, B = self.b_classifier(feats, classes)
-
-        return classes, prediction_bag, A, B
+        logits, A, B = self.b_classifier(feats, classes)
+        if return_features:
+            return logits, feats
+        return logits
 
 
 class DSMIL(nn.Module):
@@ -144,8 +145,10 @@ class DSMIL(nn.Module):
         )
         self.model = MILNet(i_classifier, b_classifier)
 
-    def forward(self, features):
-        return self.model.forward(self.feature_processor(features))
+    def forward(self, features, return_features=False):
+        return self.model.forward(
+            self.feature_processor(features), return_features=return_features
+        )
 
 
 class DSMIL_PL(BaseMILModel):
@@ -159,14 +162,11 @@ class DSMIL_PL(BaseMILModel):
         passing_v=False,
         multires_aggregation: Union[None, str] = None,
     ):
+        if n_classes == 2:
+            n_classes = 1
         self.multires_aggregation = multires_aggregation
-        super(DSMIL_PL, self).__init__(config, n_classes=n_classes)
-
+        super(DSMIL_PL, self).__init__(config, n_classes=n_classes, size=size)
         assert len(size) >= 2, "size must be a tuple with 2 or more elements"
-        assert self.n_classes > 0, "n_classes must be greater than 0"
-        if self.n_classes == 2:
-            self.n_classes = 1
-
         self.model = DSMIL(
             size=size,
             n_classes=self.n_classes,
@@ -174,78 +174,3 @@ class DSMIL_PL(BaseMILModel):
             nonlinear=nonlinear,
             passing_v=passing_v,
         )
-
-    def forward(self, batch, is_predict=False):
-        # Batch
-        features, target = batch["features"], batch["labels"]
-        # Prediction
-        classes, logits, A, B = self._forward(features)
-        # Loss (on logits)
-        if self.n_classes > 2:
-            loss = self.loss.forward(logits, target.squeeze(dim=1))
-        else:
-            loss = self.loss.forward(logits, target.float())
-        # Sigmoid or Softmax activation
-        if self.n_classes == 1:
-            preds = logits.sigmoid()
-        else:
-            preds = torch.nn.functional.softmax(logits, dim=1)
-        return {
-            "target": target,
-            "preds": preds,
-            "loss": loss,
-            "slide_name": batch["slide_name"],
-        }
-
-    def _forward(self, features: Dict[str, torch.Tensor]):
-        h: List[torch.Tensor] = [features[key] for key in features]
-        h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
-        if len(h.shape) == 3:
-            h = h.squeeze(dim=0)
-        return self.model(h)
-
-
-if __name__ == "__main__":
-    # from my_utils.config import process_config
-    # import numpy as np
-
-    # config = process_config(
-    #     "/Users/tsik/Documents/github/PhD/tp53-he-prediction/assets/test_config.yml",
-    #     name="test",
-    #     output_dir="/tmp",
-    #     fold=0,
-    #     mkdirs=False,
-    #     config_copy=False,
-    # )
-    # model = DSMIL_PL(
-    #     config,
-    #     size=(384, 128),
-    #     n_classes=1,
-    #     dropout=0.0,
-    #     nonlinear=True,
-    #     passing_v=False,
-    #     multires_aggregation=None,
-    # )
-    #
-    # x = {
-    #     "features": torch.rand(100, 384),
-    #     # "features_context": torch.rand(100, 384),
-    # }
-    # y = torch.randint(0, 2, (1, 1))
-    # model.forward((x, y))
-
-    # create test data and model
-    x = [torch.rand(100, 384) for _ in range(2)]
-    x = aggregate_features(x, method="mean")
-
-    model = DSMIL(
-        size=[384, 192, 96],
-        n_classes=1,
-        dropout=0.0,
-        nonlinear=True,
-        passing_v=False,
-    )
-
-    # run model
-    classes, prediction_bag, A, B = model(x)
-    print(classes.shape, prediction_bag.shape, A.shape, B.shape)

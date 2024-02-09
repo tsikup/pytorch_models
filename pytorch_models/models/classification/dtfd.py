@@ -119,7 +119,7 @@ class DTFD(nn.Module):
             L=size[1], D=size[2], K=K, num_cls=self.n_classes, droprate=dropout
         )
 
-    def forward(self, h: torch.Tensor):
+    def forward(self, h: torch.Tensor, return_features=False):
         feat_index = list(range(h.shape[0]))
         random.shuffle(feat_index)
         index_chunk_list = np.array_split(np.array(feat_index), self.n_bags)
@@ -140,10 +140,10 @@ class DTFD(nn.Module):
             slide_sub_logits.append(sub_logits)
             slide_pseudo_feat.append(sub_M)
 
-        slide_pseudo_feat = torch.cat(slide_pseudo_feat, dim=0)  ### numGroup x fs
-        logits = self.UClassifier(slide_pseudo_feat)  ### 1 x num_cls
+        feats = torch.cat(slide_pseudo_feat, dim=0)  ### numGroup x fs
+        logits = self.UClassifier(feats)  ### 1 x num_cls
 
-        return logits, slide_sub_logits
+        return logits, slide_sub_logits, feats
 
 
 class DTFD_PL(BaseMILModel):
@@ -157,15 +157,11 @@ class DTFD_PL(BaseMILModel):
         dropout=0.25,
         multires_aggregation: Union[None, str] = None,
     ):
-        super(DTFD_PL, self).__init__(config, n_classes=n_classes)
-
+        if n_classes == 2:
+            n_classes = 1
+        super(DTFD_PL, self).__init__(config, n_classes=n_classes, size=size)
         assert len(size) == 3, "size must be a tuple of size 3"
-        assert self.n_classes > 0, "n_classes must be greater than 0"
-        if self.n_classes == 2:
-            self.n_classes = 1
-
         self.multires_aggregation = multires_aggregation
-
         self.model = DTFD(
             size=size,
             n_classes=self.n_classes,
@@ -179,6 +175,8 @@ class DTFD_PL(BaseMILModel):
         features, target = batch["features"], batch["labels"]
 
         # Prediction
+        # logits: batch_size x 1
+        # sub_logits: ### batch_size x numGroup x fs
         logits, sub_logits = self._forward(features)
         if self.n_classes == 1:
             preds = torch.sigmoid(logits)
@@ -187,18 +185,18 @@ class DTFD_PL(BaseMILModel):
 
         logits = logits.squeeze(dim=1)
         target = target.squeeze(dim=1)
-
-        sub_logits = torch.concatenate(sub_logits, dim=0)  ### numGroup x fs
-        sub_labels = target.repeat(sub_logits.shape[0])  ### numGroup
+        sub_labels = target.view(-1, 1).repeat([1, sub_logits.shape[1]])
 
         loss = None
         if not is_predict:
             loss = self.loss.forward(
-                logits, target.float() if self.n_classes == 1 else target
+                logits, target.float() if self.n_classes == 1 else target.view(-1)
             )
             loss += self.loss.forward(
-                sub_logits,
-                sub_labels.unsqueeze(1).float() if self.n_classes == 1 else sub_labels,
+                sub_logits.view(-1, self.n_classes),
+                sub_labels.view(-1, 1).float()
+                if self.n_classes == 1
+                else sub_labels.view(-1),
             )
 
         return {
@@ -208,46 +206,27 @@ class DTFD_PL(BaseMILModel):
             "slide_name": batch["slide_name"],
         }
 
-    def _forward(self, features):
-        h: List[torch.Tensor] = [features[key] for key in features]
-        h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
-        if len(h.shape) == 3:
-            h = h.squeeze(dim=0)
-        return self.model.forward(h)
-
-
-if __name__ == "__main__":
-    # create test data and model
-    n_features = 1024
-    n_classes = 1
-    n_samples = 100
-
-    loss = nn.CrossEntropyLoss()
-    # loss = nn.BCEWithLogitsLoss()
-    loss2 = nn.CrossEntropyLoss(reduction="none")
-    target = torch.from_numpy(np.array([[1]]))
-    features = torch.rand(n_samples, n_features)
-
-    model = DTFD(
-        size=(n_features, 512, 128),
-        n_classes=n_classes,
-        K=1,
-        n_bags=3,
-        dropout=0.25,
-    )
-
-    # test forward
-    logits, sub_logits = model.forward(features)
-
-    logits = logits.squeeze(dim=1)
-    target = target.squeeze(dim=1)
-
-    sub_logits = torch.concatenate(sub_logits, dim=0)  ### numGroup x fs
-    sub_labels = target.repeat(sub_logits.shape[0])  ### numGroup
-
-    _loss = loss.forward(logits, target.float() if n_classes == 1 else target)
-    _loss += loss.forward(
-        sub_logits, sub_labels.unsqueeze(1).float() if n_classes == 1 else sub_labels
-    )
-
-    print(_loss)
+    def _forward(self, features_batch):
+        logits = []
+        sub_logits = []
+        for singlePatientFeatures in features_batch:
+            h: List[torch.Tensor] = [
+                singlePatientFeatures[key] for key in singlePatientFeatures
+            ]
+            if self.multires_aggregation == "bilinear":
+                assert len(h) == 2
+                h = self.bilinear(h[0], h[1])
+            elif self.multires_aggregation == "linear":
+                assert len(h) == 2
+                h = self.linear_agg_target(h[0]) + self.linear_agg_context(h[1])
+            else:
+                h: torch.Tensor = aggregate_features(
+                    h, method=self.multires_aggregation
+                )
+            if len(h.shape) == 3:
+                h = h.squeeze(dim=0)
+            _logits, _sub_logits = self.model.forward(h)
+            logits.append(_logits)
+            _sub_logits = torch.concatenate(_sub_logits, dim=0)
+            sub_logits.append(_sub_logits)
+        return torch.vstack(logits), torch.stack(sub_logits)

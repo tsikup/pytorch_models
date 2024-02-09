@@ -18,6 +18,7 @@ def get_loss(
     classes_loss_weights: List[int] = None,
     multi_loss_weights: List[int] = None,
     samples_per_cls: List[int] = None,
+    reduction: str = "mean",
 ):
     """
     Function to get training loss
@@ -45,6 +46,7 @@ def get_loss(
                     else None,
                     ignore_index=-100,
                     label_smoothing=0.0,
+                    reduction=reduction,
                 )
             )
         elif loss in ["bce", "binary_crossentropy"]:
@@ -53,39 +55,101 @@ def get_loss(
                     pos_weight=torch.FloatTensor(classes_loss_weights)
                     if classes_loss_weights is not None
                     else None,
+                    reduction=reduction,
                 )
             )
         elif loss == "soft_ce":
-            losses.append(L.SoftCrossEntropyLoss(ignore_index=-100, smooth_factor=0.0))
+            losses.append(
+                L.SoftCrossEntropyLoss(
+                    ignore_index=-100,
+                    smooth_factor=0.0,
+                    reduction=reduction,
+                )
+            )
         elif loss == "soft_bce":
             losses.append(
-                L.SoftBCEWithLogitsLoss(ignore_index=-100, smooth_factor=None)
+                L.SoftBCEWithLogitsLoss(
+                    ignore_index=-100,
+                    smooth_factor=None,
+                    reduction=reduction,
+                )
             )
         elif loss == "batch_balanced_bce":
-            losses.append(L.BalancedBCEWithLogitsLoss())
+            losses.append(
+                L.BalancedBCEWithLogitsLoss(
+                    reduction=reduction,
+                )
+            )
         elif loss == "binary_dice":
             # TODO: classes that contribute to loss computation and smooth
+            if reduction != "mean":
+                raise NotImplementedError(
+                    "Only mean reduction is supported for DiceLoss currently."
+                )
             losses.append(L.DiceLoss(mode="binary", smooth=0.0))
         elif loss == "multiclass_dice":
+            if reduction != "mean":
+                raise NotImplementedError(
+                    "Only mean reduction is supported for DiceLoss currently."
+                )
             losses.append(L.DiceLoss(mode="multiclass", smooth=0.0))
         elif loss == "binary_focal":
-            losses.append(L.BinaryFocalLoss(alpha=0.0, gamma=2.0, normalized=False))
+            losses.append(
+                L.BinaryFocalLoss(
+                    alpha=0.0, gamma=2.0, normalized=False, reduction=reduction
+                )
+            )
         elif loss == "focal":
-            losses.append(L.FocalLoss(alpha=0.0, gamma=2.0, normalized=False))
+            losses.append(
+                L.FocalLoss(
+                    alpha=0.0,
+                    gamma=2.0,
+                    normalized=False,
+                    reduction=reduction,
+                )
+            )
         elif loss == "focal_cosine":
-            losses.append(L.FocalCosineLoss())
+            losses.append(
+                L.FocalCosineLoss(
+                    reduction=reduction,
+                )
+            )
         elif loss == "binary_jaccard":
+            if reduction != "mean":
+                raise NotImplementedError(
+                    "Only mean reduction is supported for JaccardLoss currently."
+                )
             losses.append(L.JaccardLoss(mode="binary", smooth=0.0))
         elif loss == "multiclass_jaccard":
+            if reduction != "mean":
+                raise NotImplementedError(
+                    "Only mean reduction is supported for JaccardLoss currently."
+                )
             losses.append(L.JaccardLoss(mode="multiclass", smooth=0.0))
         elif loss == "binary_lovasz":
+            if reduction != "mean":
+                raise NotImplementedError(
+                    "Only mean reduction is supported for LovaszLoss currently."
+                )
             losses.append(L.BinaryLovaszLoss())
         elif loss == "lovasz":
+            if reduction != "mean":
+                raise NotImplementedError(
+                    "Only mean reduction is supported for LovaszLoss currently."
+                )
             losses.append(L.LovaszLoss())
         elif loss == "wing":
-            losses.append(L.WingLoss())
+            losses.append(
+                L.WingLoss(
+                    reduction=reduction,
+                )
+            )
         elif loss == "balanced_ce":
             assert samples_per_cls is not None
+            if reduction != "mean":
+                raise NotImplementedError(
+                    "Only mean reduction is supported for BalancedLoss currently."
+                )
             losses.append(
                 BalancedLoss(
                     loss_type="cross_entropy",
@@ -95,6 +159,10 @@ def get_loss(
             )
         elif loss == "balanced_bce":
             assert samples_per_cls is not None
+            if reduction != "mean":
+                raise NotImplementedError(
+                    "Only mean reduction is supported for BalancedLoss currently."
+                )
             losses.append(
                 BalancedLoss(
                     loss_type="binary_cross_entropy",
@@ -104,6 +172,10 @@ def get_loss(
             )
         elif loss == "balanced_focal":
             assert samples_per_cls is not None
+            if reduction != "mean":
+                raise NotImplementedError(
+                    "Only mean reduction is supported for BalancedLoss currently."
+                )
             losses.append(
                 BalancedLoss(
                     loss_type="focal_loss",
@@ -114,6 +186,10 @@ def get_loss(
         elif loss in ["demographic_parity", "demo_parity"]:
             _n_classes = n_classes if n_classes > 2 else 2
             sensitive_classes = list(range(_n_classes))
+            if reduction != "mean":
+                raise NotImplementedError(
+                    "Only mean reduction is supported for DemographicParityLoss currently."
+                )
             losses.append(DemographicParityLoss(sensitive_classes=sensitive_classes))
         else:
             raise RuntimeError("No loss with that name.")

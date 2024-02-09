@@ -1,3 +1,4 @@
+import warnings
 from typing import List, Tuple, Union
 import numpy as np
 import torch
@@ -58,7 +59,8 @@ def aggregate_features(
         # h = torch.kron(*features)
         h = kronecker_product_einsum_batched(*features)
     else:
-        h = features[0]
+        warnings.warn(f"Method {method} not recognized. Returning both.")
+        h = features
     return h
 
 

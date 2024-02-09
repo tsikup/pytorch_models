@@ -1,4 +1,4 @@
-from typing import Any, Callable, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import lightning as L
 import numpy as np
@@ -7,13 +7,14 @@ import torch.nn.functional as F
 from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
 from dotmap import DotMap
 from lightning.pytorch.core.optimizer import LightningOptimizer
-from torchvision.transforms.functional import center_crop
+from torch import nn
 
 from pytorch_models.losses.losses import get_loss
 from pytorch_models.optim.lookahead import Lookahead
 from pytorch_models.optim.utils import get_warmup_factor
 from pytorch_models.utils.metrics.metrics import get_metrics
-from pytorch_models.utils.survival import coxloss, MyDeepHitLoss, HybridDeepHitLoss
+from pytorch_models.utils.survival import HybridDeepHitLoss, MyDeepHitLoss, coxloss
+from pytorch_models.utils.tensor import aggregate_features
 from ranger21 import Ranger21
 from timm.optim import AdaBelief, AdamP
 from torch.optim import (
@@ -39,6 +40,7 @@ from torch.optim.lr_scheduler import (
     StepLR,
 )
 from torch_optimizer import SWATS, AdaBound, AggMo, Apollo, DiffGrad
+from torchvision.transforms.functional import center_crop
 
 # TODO: inference sliding window
 #  https://github.com/YtongXie/CoTr/blob/main/CoTr_package/CoTr/network_architecture/neural_network.py
@@ -62,6 +64,7 @@ class BaseModel(L.LightningModule):
         self.save_hyperparameters()
 
         self.n_classes = n_classes
+        assert self.n_classes > 0, "n_classes must be greater than 0"
         self.in_channels = in_channels
         self.segmentation = segmentation
 
@@ -82,6 +85,7 @@ class BaseModel(L.LightningModule):
             classes_loss_weights=config.trainer.classes_loss_weights,
             multi_loss_weights=config.trainer.multi_loss_weights,
             samples_per_cls=config.trainer.samples_per_class,
+            reduction="mean",
         )
 
         # Get metrics
@@ -135,27 +139,29 @@ class BaseModel(L.LightningModule):
     def l12_regularisation(self, l1_w=0.3, l2_w=0.7):
         return l1_w * self.l_regularisation(1) + l2_w * self.l_regularisation(2)
 
-    def forward(self, batch):
+    def forward(self, batch, is_predict=False):
         # Batch
         images, target = batch
         # Prediction
         logits = self._forward(images)
         # Loss (on logits)
-        if len(target.shape) > 1 and self.n_classes > 1:
-            if target.shape[1] == 1:
-                target = target.squeeze(1)
+        loss = None
+        if not is_predict:
+            if len(target.shape) > 1 and self.n_classes > 1:
+                if target.shape[1] == 1:
+                    target = target.squeeze(1)
+                else:
+                    target = torch.argmax(target, dim=1)
+            if self.n_classes > 1:
+                loss = self.loss.forward(logits, target)
             else:
-                target = torch.argmax(target, dim=1)
-        if self.n_classes > 1:
-            loss = self.loss.forward(logits, target)
-        else:
-            loss = self.loss.forward(logits, target.float())
+                loss = self.loss.forward(logits, target.float())
 
-        if self.l1_reg_weight:
-            loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
+            if self.l1_reg_weight:
+                loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
 
-        if self.l2_reg_weight:
-            loss = loss + self.l2_regularisation(l_w=self.l2_reg_weight)
+            if self.l2_reg_weight:
+                loss = loss + self.l2_regularisation(l_w=self.l2_reg_weight)
 
         # Sigmoid or Softmax activation
         if self.n_classes == 1:
@@ -384,16 +390,29 @@ class BaseModel(L.LightningModule):
         self.log_dict(
             metrics, on_step=False, on_epoch=True, prog_bar=False, logger=True
         )
-        self.log(
-            f"{mode}_loss",
-            loss,
-            on_step=on_step,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-            sync_dist=sync_dist,
-            batch_size=self.batch_size,
-        )
+        if isinstance(loss, dict):
+            for key, value in loss.items():
+                self.log(
+                    f"{mode}_{key}",
+                    value,
+                    on_step=on_step,
+                    on_epoch=True,
+                    prog_bar=True,
+                    logger=True,
+                    sync_dist=sync_dist,
+                    batch_size=self.batch_size,
+                )
+        else:
+            self.log(
+                f"{mode}_loss",
+                loss,
+                on_step=on_step,
+                on_epoch=True,
+                prog_bar=True,
+                logger=True,
+                sync_dist=sync_dist,
+                batch_size=self.batch_size,
+            )
 
 
 class BaseSegmentationModel(BaseModel):
@@ -415,23 +434,25 @@ class BaseSegmentationModel(BaseModel):
         # Prediction
         logits = self._forward(images)
         # Loss (on logits)
-        if logits.shape[-2] < target.shape[-2]:
-            target = center_crop(target, logits.shape[-2:])
-        if len(target.shape) == 4 and self.n_classes > 1:
-            if target.shape[1] == 1:
-                target = target.squeeze(1)
+        loss = None
+        if not is_predict:
+            if logits.shape[-2] < target.shape[-2]:
+                target = center_crop(target, logits.shape[-2:])
+            if len(target.shape) == 4 and self.n_classes > 1:
+                if target.shape[1] == 1:
+                    target = target.squeeze(1)
+                else:
+                    target = torch.argmax(target, dim=1)
+            if self.n_classes > 1:
+                loss = self.loss.forward(logits, target)
             else:
-                target = torch.argmax(target, dim=1)
-        if self.n_classes > 1:
-            loss = self.loss.forward(logits, target)
-        else:
-            loss = self.loss.forward(logits, target.float())
+                loss = self.loss.forward(logits, target.float())
 
-        if self.l1_reg_weight:
-            loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
+            if self.l1_reg_weight:
+                loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
 
-        if self.l2_reg_weight:
-            loss = loss + self.l2_regularisation(l_w=self.l2_reg_weight)
+            if self.l2_reg_weight:
+                loss = loss + self.l2_regularisation(l_w=self.l2_reg_weight)
 
         if self.interpolate_output:
             preds = F.interpolate(
@@ -460,10 +481,19 @@ class BaseMILModel(BaseModel):
         self,
         config: DotMap,
         n_classes: int,
+        size: List[int] = None,
     ):
         super(BaseMILModel, self).__init__(
             config, n_classes=n_classes, in_channels=None, segmentation=False
         )
+
+        if self.multires_aggregation == "bilinear":
+            assert size is not None
+            self.bilinear = nn.Bilinear(size[0], size[0], size[0])
+        elif self.multires_aggregation == "linear":
+            assert size is not None
+            self.linear_agg_target = nn.Linear(size[0], size[0])
+            self.linear_agg_context = nn.Linear(size[0], size[0])
 
     def forward(self, batch, is_predict=False):
         # Batch
@@ -471,7 +501,11 @@ class BaseMILModel(BaseModel):
         # Prediction
         logits = self._forward(features)
         # Loss (on logits)
-        loss = self.loss.forward(logits, target.float())
+        loss = None
+        if not is_predict:
+            loss = self.loss.forward(
+                logits, target.float() if logits.shape[1] == 1 else target.view(-1)
+            )
         # Sigmoid or Softmax activation
         if self.n_classes == 1:
             preds = logits.sigmoid()
@@ -483,6 +517,28 @@ class BaseMILModel(BaseModel):
             "loss": loss,
             "slide_name": batch["slide_name"],
         }
+
+    def _forward(self, features_batch):
+        logits = []
+        for singlePatientFeatures in features_batch:
+            h: List[torch.Tensor] = [
+                singlePatientFeatures[key] for key in singlePatientFeatures
+            ]
+            if self.multires_aggregation == "bilinear":
+                assert len(h) == 2
+                h = self.bilinear(h[0], h[1])
+            elif self.multires_aggregation == "linear":
+                assert len(h) == 2
+                h = self.linear_agg_target(h[0]) + self.linear_agg_context(h[1])
+            else:
+                h: torch.Tensor = aggregate_features(
+                    h, method=self.multires_aggregation
+                )
+            if len(h.shape) == 3:
+                h = h.squeeze(dim=0)
+            _logits = self.model.forward(h)
+            logits.append(_logits)
+        return torch.vstack(logits)
 
     def training_step(self, batch, batch_idx):
         output = self.forward(batch)
@@ -520,241 +576,6 @@ class BaseMILModel(BaseModel):
     def predict_step(self, batch, batch_idx):
         output = self.forward(batch, is_predict=True)
         return output["preds"], batch["labels"], batch["slide_name"]
-
-
-class BaseMILModel_LNL(BaseModel):
-    def __init__(
-        self,
-        config: DotMap,
-        n_classes: int,
-        n_classes_aux: int,
-        aux_lambda: float = 0.1,
-    ):
-        super(BaseMILModel_LNL, self).__init__(
-            config,
-            n_classes=n_classes,
-            in_channels=None,
-            segmentation=False,
-            automatic_optimization=False,
-        )
-        self.n_classes_aux = n_classes_aux
-        if self.n_classes_aux > 2:
-            self.n_classes_aux = 1
-        if self.n_classes_aux == 1:
-            self.aux_act = torch.nn.Sigmoid()
-            self.loss_aux = get_loss(["bce"])
-        else:
-            self.aux_act = torch.nn.Softmax(dim=1)
-            self.loss_aux = get_loss(["ce"])
-        self.aux_lambda = aux_lambda
-
-    def forward(self, batch, is_predict=False, is_adv=False):
-        # Batch
-        features, target, target_aux = (
-            batch["features"],
-            batch["labels"],
-            batch["labels_aux"],
-        )
-        # Prediction
-        logits, logits_aux = self._forward(features, is_adv)
-
-        _loss = None
-        _loss_aux_adv = None
-        _loss_aux_mi = None
-        if is_adv:
-            # Loss (on logits)
-            _loss = self.loss.forward(logits, target.float())
-            preds_aux = self.aux_act(logits_aux)
-            _loss_aux_adv = torch.mean(torch.sum(preds_aux * torch.log(preds_aux), 1))
-
-            loss = _loss + _loss_aux_adv * self.aux_lambda
-        else:
-            _loss_aux_mi = self.loss_aux.forward(logits_aux, target_aux)
-            loss = _loss_aux_mi
-
-        # Sigmoid or Softmax activation
-        if self.n_classes == 1:
-            preds = logits.sigmoid()
-        else:
-            preds = torch.nn.functional.softmax(logits, dim=1)
-        return {
-            "target": target,
-            "preds": preds,
-            "loss": loss,
-            "main_loss": _loss,
-            "aux_adv_loss": _loss_aux_adv,
-            "aux_mi_loss": _loss_aux_mi,
-            "slide_name": batch["slide_name"],
-        }
-
-    def configure_optimizers(self):
-        optimizer_main = self._get_optimizer(self.model.main_model.parameters())
-        optimizer_aux = self._get_optimizer(self.model.aux_model.parameters())
-
-        if self.config.trainer.lr_scheduler is not None:
-            scheduler_main = self._get_scheduler(optimizer_main)
-            scheduler_aux = self._get_scheduler(optimizer_aux)
-            return [optimizer_main, optimizer_aux], [scheduler_main, scheduler_aux]
-        else:
-            return optimizer_main, optimizer_aux
-
-    def training_step(self, batch, batch_idx):
-        optimizers = self.optimizers()
-        opt = optimizers[0]
-        opt_aux = optimizers[1]
-
-        # ******************************** #
-        # Main task + Adversarial AUX task #
-        # ******************************** #
-        output = self.forward(batch, is_adv=True)
-        target, preds, loss, main_loss, aux_adv_loss = (
-            output["target"],
-            output["preds"],
-            output["loss"],
-            output["main_loss"],
-            output["aux_adv_loss"],
-        )
-
-        opt.optimizer.zero_grad()
-        opt_aux.optimizer.zero_grad()
-        self.manual_backward(loss)
-        opt.step()
-
-        # *************************** #
-        # Mutual Information AUX Task #
-        # *************************** #
-        output_mi = self.forward(batch, is_adv=False)
-        aux_mi_loss = output_mi["aux_mi_loss"]
-        opt.optimizer.zero_grad()
-        opt_aux.optimizer.zero_grad()
-        self.manual_backward(aux_mi_loss)
-        opt.step()
-        opt_aux.step()
-
-        self._log_metrics(
-            preds, target, loss, main_loss, aux_adv_loss, aux_mi_loss, "train"
-        )
-        return {
-            "loss": loss,
-            "main_loss": main_loss,
-            "aux_adv_loss": aux_adv_loss,
-            "aux_mi_loss": aux_mi_loss,
-            "preds": preds,
-            "target": target,
-        }
-
-    def validation_step(self, batch, batch_idx):
-        output = self.forward(batch, is_adv=True)
-        target, preds, loss, main_loss, aux_adv_loss = (
-            output["target"],
-            output["preds"],
-            output["loss"],
-            output["main_loss"],
-            output["aux_adv_loss"],
-        )
-        output_mi = self.forward(batch, is_adv=False)
-        aux_mi_loss = output_mi["aux_mi_loss"]
-
-        self._log_metrics(
-            preds, target, loss, main_loss, aux_adv_loss, aux_mi_loss, "val"
-        )
-        return {
-            "val_loss": loss,
-            "val_main_loss": main_loss,
-            "val_aux_adv_loss": aux_adv_loss,
-            "val_aux_mi_loss": aux_mi_loss,
-            "val_preds": preds,
-            "val_target": target,
-        }
-
-    def test_step(self, batch, batch_idx):
-        output = self.forward(batch, is_adv=True)
-        target, preds, loss, main_loss, aux_adv_loss = (
-            output["target"],
-            output["preds"],
-            output["loss"],
-            output["main_loss"],
-            output["aux_adv_loss"],
-        )
-        output_mi = self.forward(batch, is_adv=False)
-        aux_mi_loss = output_mi["aux_mi_loss"]
-
-        self._log_metrics(
-            preds, target, loss, main_loss, aux_adv_loss, aux_mi_loss, "test"
-        )
-
-        return {
-            "test_loss": loss,
-            "test_main_loss": main_loss,
-            "test_aux_adv_loss": aux_adv_loss,
-            "test_aux_mi_loss": aux_mi_loss,
-            "test_preds": preds,
-            "test_target": target,
-        }
-
-    def predict_step(self, batch, batch_idx):
-        output = self.forward(batch, is_predict=True, is_adv=True)
-        return output["preds"], batch["labels"], batch["slide_name"]
-
-    def _log_metrics(
-        self, preds, target, loss, main_loss, aux_adv_loss, aux_mi_loss, mode
-    ):
-        on_step = False if mode != "train" else True
-        # https://github.com/Lightning-AI/lightning/issues/13210
-        sync_dist = self.sync_dist and (
-            mode == "val" or mode == "test" or mode == "eval"
-        )
-        if mode == "val":
-            metrics = self.val_metrics
-        elif mode == "train":
-            metrics = self.train_metrics
-        elif mode == "test":
-            metrics = self.test_metrics
-
-        self._compute_metrics(preds, target, mode)
-        self.log_dict(
-            metrics, on_step=False, on_epoch=True, prog_bar=False, logger=True
-        )
-        self.log(
-            f"{mode}_loss",
-            loss,
-            on_step=on_step,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-            sync_dist=sync_dist,
-            batch_size=self.batch_size,
-        )
-        self.log(
-            f"{mode}_main_loss",
-            main_loss,
-            on_step=on_step,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-            sync_dist=sync_dist,
-            batch_size=self.batch_size,
-        )
-        self.log(
-            f"{mode}_aux_adv_loss",
-            aux_adv_loss,
-            on_step=on_step,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-            sync_dist=sync_dist,
-            batch_size=self.batch_size,
-        )
-        self.log(
-            f"{mode}_aux_mi_loss",
-            aux_mi_loss,
-            on_step=on_step,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-            sync_dist=sync_dist,
-            batch_size=self.batch_size,
-        )
 
 
 class BaseSurvModel(BaseModel):
@@ -941,9 +762,11 @@ class BaseMILSurvModel(BaseSurvModel):
         # Prediction
         logits = self._forward(features)
         # Loss (on logits)
-        loss = self.compute_loss(survtime, event, logits)
-        if self.l1_reg_weight:
-            loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
+        loss = None
+        if not is_predict:
+            loss = self.compute_loss(survtime, event, logits)
+            if self.l1_reg_weight:
+                loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
 
         return {
             "event": event,
@@ -952,6 +775,18 @@ class BaseMILSurvModel(BaseSurvModel):
             "loss": loss,
             "slide_name": batch["slide_name"],
         }
+
+    def _forward(self, features_batch: List[Dict[str, torch.Tensor]]):
+        logits = []
+        for singlePatientFeatures in features_batch:
+            h: List[torch.Tensor] = [
+                singlePatientFeatures[key] for key in singlePatientFeatures
+            ]
+            h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
+            if len(h.shape) == 3:
+                h = h.squeeze(dim=0)
+            logits.append(self.model.forward(h))
+        return torch.vstack(logits)
 
 
 class EnsembleInferenceModel(BaseModel):

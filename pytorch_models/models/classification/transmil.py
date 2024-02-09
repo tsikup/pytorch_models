@@ -1,12 +1,8 @@
-from typing import Dict
-
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from nystrom_attention import NystromAttention
 from pytorch_models.models.base import BaseMILModel
-from pytorch_models.utils.tensor import aggregate_features
 
 
 class TransLayer(nn.Module):
@@ -71,7 +67,9 @@ class TransMIL(nn.Module):
         self.norm = nn.LayerNorm(size[1])
         self._fc2 = nn.Linear(size[1], self.n_classes)
 
-    def forward(self, h: torch.Tensor):  # list of [B, n, 1024] if size[0] == 1024
+    def forward(
+        self, h: torch.Tensor, return_features=False
+    ):  # list of [B, n, 1024] if size[0] == 1024
         device = h.device
 
         h = self._fc1(h)  # [B, n, 512] if size[1] == 512
@@ -103,13 +101,12 @@ class TransMIL(nn.Module):
 
         # ---->predict
         logits = self._fc2(h)  # [B, n_classes]
-        Y_hat = torch.argmax(logits, dim=1)
-        Y_prob = F.softmax(logits, dim=1)
-        results_dict = {"logits": logits, "Y_prob": Y_prob, "Y_hat": Y_hat}
-        return results_dict
+        if return_features:
+            return logits, h
+        return logits
 
 
-class TransMIL_Features_PL(BaseMILModel):
+class TransMIL_PL(BaseMILModel):
     def __init__(
         self,
         config,
@@ -117,44 +114,8 @@ class TransMIL_Features_PL(BaseMILModel):
         size=(1024, 512),
         multires_aggregation=None,
     ):
+        if n_classes == 1:
+            n_classes = 2
         self.multires_aggregation = multires_aggregation
-        super(TransMIL_Features_PL, self).__init__(config, n_classes=n_classes)
+        super(TransMIL_PL, self).__init__(config, n_classes=n_classes, size=size)
         self.model = TransMIL(n_classes=n_classes, size=size)
-
-    def forward(self, batch, is_predict=False):
-        # Batch
-        features, target = batch["features"], batch["labels"]
-
-        # Prediction
-        results_dict = self._forward(data=features)
-        logits = results_dict["logits"]
-        preds = results_dict["Y_prob"]
-
-        loss = None
-        if not is_predict:
-            # Loss (on logits)
-            loss = self.loss.forward(logits, target.squeeze(dim=1))
-
-        if self.n_classes in [1, 2]:
-            preds = preds[:, 1]
-            preds = torch.unsqueeze(preds, dim=1)
-
-        return {
-            "target": target,
-            "preds": preds,
-            "loss": loss,
-            "slide_name": batch["slide_name"],
-        }
-
-    def _forward(self, data: Dict[str, torch.Tensor]):
-        h = [data[key] for key in data]
-        h = aggregate_features(h, method=self.multires_aggregation)
-        return self.model(h)
-
-
-if __name__ == "__main__":
-    _data = torch.randn((1, 6000, 1024))
-    _model = TransMIL(n_classes=2)
-    print(_model.eval())
-    _results_dict = _model(_data)
-    print(_results_dict)

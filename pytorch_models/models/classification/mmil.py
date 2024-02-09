@@ -222,12 +222,9 @@ class MultipleMILTransformer(nn.Module):
             self.layers.append(layer)
 
     def head(self, x):
-        logits = self.fc2(x)
-        Y_hat = torch.argmax(logits, dim=1)
-        Y_prob = F.softmax(logits, dim=1)
-        return logits, Y_prob, Y_hat
+        return self.fc2(x)
 
-    def forward(self, x, coords=None, mask_ratio=0):
+    def forward(self, x, coords=None, mask_ratio=0, return_features=False):
         # ---> init
         x = self.fc1(x)
         if self.ape:
@@ -256,8 +253,11 @@ class MultipleMILTransformer(nn.Module):
         # ---> head
         msg_cls, _, _ = data
         msg_cls = msg_cls.view(1, self.embed_dim)
+        logits = self.head(msg_cls)
 
-        return self.head(msg_cls)
+        if return_features:
+            return logits, msg_cls
+        return logits
 
 
 class MMIL_PL(BaseMILModel):
@@ -273,12 +273,10 @@ class MMIL_PL(BaseMILModel):
         num_layers: int = 2,
         multires_aggregation: Union[None, str] = None,
     ):
-        super(MMIL_PL, self).__init__(config, n_classes=n_classes)
-
+        if n_classes == 1:
+            n_classes = 2
+        super(MMIL_PL, self).__init__(config, n_classes=n_classes, size=size)
         assert len(size) == 2, "size must be a tuple of size 2"
-        assert self.n_classes > 0, "n_classes must be greater than 0"
-        if self.n_classes == 1:
-            self.n_classes = 2
 
         self.size = size
         self.num_msg = num_msg
@@ -306,7 +304,8 @@ class MMIL_PL(BaseMILModel):
             coords = batch["coords"]
 
         # Prediction
-        logits, preds, _ = self._forward(features, coords)
+        logits = self._forward(features, coords)
+        preds = F.softmax(logits, dim=1)
 
         loss = None
         if not is_predict:
@@ -319,12 +318,27 @@ class MMIL_PL(BaseMILModel):
             "slide_name": batch["slide_name"],
         }
 
-    def _forward(self, features: Dict[str, torch.Tensor], coords: torch.Tensor = None):
-        h: List[torch.Tensor] = [features[key] for key in features]
-        h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
-        if len(h.shape) == 2:
-            h = h.unsqueeze(dim=0)
-        return self.model.forward(h, coords)
+    def _forward(self, features_batch, coords_batch=None):
+        logits = []
+        for idx, singlePatientFeatures in enumerate(features_batch):
+            h: List[torch.Tensor] = [
+                singlePatientFeatures[key] for key in singlePatientFeatures
+            ]
+            if self.multires_aggregation == "bilinear":
+                assert len(h) == 2
+                h = self.bilinear(h[0], h[1])
+            elif self.multires_aggregation == "linear":
+                assert len(h) == 2
+                h = self.linear_agg_target(h[0]) + self.linear_agg_context(h[1])
+            else:
+                h: torch.Tensor = aggregate_features(
+                    h, method=self.multires_aggregation
+                )
+            if len(h.shape) == 3:
+                h = h.squeeze(dim=0)
+            _logits = self.model.forward(h, coords_batch[idx] if coords_batch else None)
+            logits.append(_logits)
+        return torch.vstack(logits)
 
     def _compute_metrics(self, preds, target, mode):
         if mode == "val":
@@ -340,24 +354,3 @@ class MMIL_PL(BaseMILModel):
             )
         else:
             metrics(preds, target.view(-1))
-
-
-if __name__ == "__main__":
-    n_features = 1024
-    n_classes = 1
-    n_samples = 100
-
-    target = torch.from_numpy(np.array([[1]]))
-    features = torch.rand(1, n_samples, n_features)
-    coords = torch.randint(0, 10, (n_samples, 2))
-
-    model = MultipleMILTransformer(mode="coords")
-
-    # test forward
-    logits, preds, _ = model.forward(features, coords)
-
-    target = target.squeeze(dim=1)
-
-    loss = nn.CrossEntropyLoss()
-    _loss = loss.forward(logits, target)
-    print(_loss)

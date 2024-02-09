@@ -48,7 +48,7 @@ class MultiAttentionMIL(nn.Module):
 
         self.fc4 = nn.Sequential(nn.Linear(self.D, self.num_classes))
 
-    def forward(self, x):
+    def forward(self, x, return_attentions=False, return_features=False):
         ################
         x1 = x.squeeze(0)
         x1 = self.fc1(x1)
@@ -90,7 +90,13 @@ class MultiAttentionMIL(nn.Module):
 
         logits = self.fc4(m3)
 
-        return logits, a1, a2, a3
+        if return_attentions:
+            return logits, a1, a2, a3
+        if return_features:
+            return logits, m3
+        if return_attentions and return_features:
+            return logits, a1, a2, a3, m3
+        return logits
 
 
 class MAMIL_PL(BaseMILModel):
@@ -102,11 +108,10 @@ class MAMIL_PL(BaseMILModel):
         dropout: bool = True,
         multires_aggregation: Union[None, str] = None,
     ):
-        super(MAMIL_PL, self).__init__(config, n_classes=n_classes)
+        super(MAMIL_PL, self).__init__(config, n_classes=n_classes, size=size)
         assert (
             len(size) >= 2
         ), "size must be a tuple of (n_features, layer1_size, layer2_size, ...)"
-        assert self.n_classes > 0, "n_classes must be greater than 0"
         if self.n_classes == 2:
             self.n_classes = 1
 
@@ -114,47 +119,3 @@ class MAMIL_PL(BaseMILModel):
         self.dropout = dropout
 
         self.model = MultiAttentionMIL(self.n_classes, size, use_dropout=self.dropout)
-
-    def forward(self, batch, is_predict=False):
-        # Batch
-        features, target = batch["features"], batch["labels"]
-
-        # Prediction
-        logits, a1, a2, a3 = self._forward(features)
-        logits = logits.squeeze(dim=1)
-        target = target.squeeze(dim=1)
-
-        loss = None
-        if not is_predict:
-            loss = self.loss.forward(
-                logits, target.float() if self.n_classes == 1 else target
-            )
-
-        preds = torch.sigmoid(logits) if self.n_classes == 1 else F.softmax(logits)
-
-        return {
-            "target": target,
-            "preds": preds,
-            "loss": loss,
-            "slide_name": batch["slide_name"],
-        }
-
-    def _forward(self, features):
-        h: List[torch.Tensor] = [features[key] for key in features]
-        h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
-        if len(h.shape) == 3:
-            h = h.squeeze(dim=0)
-        return self.model.forward(h)
-
-
-if __name__ == "__main__":
-    _data = torch.randn((1, 6000, 1024))
-    _model = MultiAttentionMIL(
-        num_classes=1,
-        size=(1024, 512, 128),
-        use_dropout=True,
-        n_dropout=0.4,
-    )
-    _model = _model.eval()
-    _results = _model(_data)
-    print(_results)

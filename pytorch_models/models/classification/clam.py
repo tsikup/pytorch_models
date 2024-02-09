@@ -205,6 +205,21 @@ class CLAM_SB(nn.Module):
             self.classifier_size[0] == size[self.attention_depth]
         ), "Mismatch between attention module output feature size and classifiers' input feature size"
 
+        if self.multires_aggregation["attention"] != "late":
+            __size = size[0]
+        else:
+            __size = self.classifier_size[0]
+        if self.multires_aggregation["features"] == "bilinear":
+            self.bilinear = nn.Bilinear(__size, __size, __size)
+        if self.multires_aggregation["attention"] == "bilinear":
+            self.bilinear_attention = nn.Bilinear(__size, __size, __size)
+        if self.multires_aggregation["features"] == "linear":
+            self.linear_agg_target = nn.Linear(__size, __size, bias=False)
+            self.linear_agg_context = nn.Linear(__size, __size, bias=False)
+        if self.multires_aggregation["attention"] == "linear":
+            self.linear_agg_attention_target = nn.Linear(__size, __size, bias=False)
+            self.linear_agg_attention_context = nn.Linear(__size, __size, bias=False)
+
         if (
             self.use_multires
             and self.multires_aggregation["attention"] == "late"
@@ -365,11 +380,20 @@ class CLAM_SB(nn.Module):
                 h_context is not None
             ), "Multiresolution is enabled.. h_context features should not be None."
             if self.multires_aggregation["attention"] is None:
-                h = self._aggregate_multires_features(
-                    [h, h_context],
-                    method=self.multires_aggregation["features"],
-                    is_attention=False,
-                )
+                if self.multires_aggregation["features"] not in ["bilinear", "linear"]:
+                    h = self._aggregate_multires_features(
+                        [h, h_context],
+                        method=self.multires_aggregation["features"],
+                        is_attention=False,
+                    )
+                elif self.multires_aggregation["features"] == "bilinear":
+                    h = self.bilinear(h, h_context)
+                elif self.multires_aggregation["features"] == "linear":
+                    h = self._aggregate_multires_features(
+                        [self.linear_agg_target(h), self.linear_agg_context(h_context)],
+                        method="sum",
+                        is_attention=False,
+                    )
                 A, h = self.attention_net(h)  # NxK
                 A = torch.transpose(A, 1, 0)  # KxN
             else:
@@ -380,16 +404,46 @@ class CLAM_SB(nn.Module):
                 A_context = torch.transpose(A_context, 1, 0)  # KxN
 
                 if self.multires_aggregation["attention"] != "late":
-                    A = self._aggregate_multires_features(
-                        [A, A_context],
-                        method=self.multires_aggregation["attention"],
-                        is_attention=True,
-                    )
-                    h = self._aggregate_multires_features(
-                        [h, h_context],
-                        method=self.multires_aggregation["features"],
-                        is_attention=False,
-                    )
+                    if self.multires_aggregation["attention"] not in [
+                        "bilinear",
+                        "linear",
+                    ]:
+                        A = self._aggregate_multires_features(
+                            [A, A_context],
+                            method=self.multires_aggregation["attention"],
+                            is_attention=True,
+                        )
+                    elif self.multires_aggregation["attention"] == "bilinear":
+                        A = self.bilinear_attention(A, A_context)
+                    elif self.multires_aggregation["attention"] == "linear":
+                        A = self._aggregate_multires_features(
+                            [
+                                self.linear_agg_attention_target(A),
+                                self.linear_agg_attention_context(A_context),
+                            ],
+                            method="sum",
+                            is_attention=True,
+                        )
+                    if self.multires_aggregation["features"] not in [
+                        "bilinear",
+                        "linear",
+                    ]:
+                        h = self._aggregate_multires_features(
+                            [h, h_context],
+                            method=self.multires_aggregation["features"],
+                            is_attention=False,
+                        )
+                    elif self.multires_aggregation["features"] == "bilinear":
+                        h = self.bilinear(h, h_context)
+                    elif self.multires_aggregation["features"] == "linear":
+                        h = self._aggregate_multires_features(
+                            [
+                                self.linear_agg_target(h),
+                                self.linear_agg_context(h_context),
+                            ],
+                            method="sum",
+                            is_attention=False,
+                        )
         else:
             A, h = self.attention_net(h)
             A = torch.transpose(A, 1, 0)  # KxN
@@ -440,11 +494,26 @@ class CLAM_SB(nn.Module):
 
             M = torch.mm(A, h)
             M_context = torch.mm(A_context, h_context)
-            M = self._aggregate_multires_features(
-                [M, M_context],
-                method=self.multires_aggregation["features"],
-                is_attention=False,
-            )
+            if self.multires_aggregation["features"] not in [
+                "bilinear",
+                "linear",
+            ]:
+                M = self._aggregate_multires_features(
+                    [M, M_context],
+                    method=self.multires_aggregation["features"],
+                    is_attention=False,
+                )
+            elif self.multires_aggregation["features"] == "bilinear":
+                h = self.bilinear(M, M_context)
+            elif self.multires_aggregation["features"] == "linear":
+                h = self._aggregate_multires_features(
+                    [
+                        self.linear_agg_target(M),
+                        self.linear_agg_context(M_context),
+                    ],
+                    method="sum",
+                    is_attention=False,
+                )
 
             logits = self.classifiers(M)
             Y_hat = torch.topk(logits, 1, dim=1)[1]
@@ -761,11 +830,8 @@ class CLAM_PL(BaseMILModel):
 
         # Prediction
         logits, preds, _, A, results_dict = self._forward(
-            h=features["features"],
-            h_context=features["features_context"]
-            if self.multires_aggregation is not None and "features_context" in features
-            else None,
-            label=target,
+            features,
+            labels=target,
             instance_eval=self.instance_eval and not is_predict,
             return_features=False,
             attention_only=False,
@@ -776,9 +842,12 @@ class CLAM_PL(BaseMILModel):
             # Loss (on logits)
             loss = self.loss.forward(logits, target.squeeze(dim=1))
             if self.instance_eval:
+                instance_loss = torch.mean(
+                    torch.stack([r["instance_loss"] for r in results_dict])
+                )
                 loss = (
                     1 - self.instance_loss_weight
-                ) * loss + self.instance_loss_weight * results_dict["instance_loss"]
+                ) * loss + self.instance_loss_weight * instance_loss
 
         if self.n_classes in [1, 2]:
             preds = preds[:, 1]
@@ -794,54 +863,97 @@ class CLAM_PL(BaseMILModel):
 
     def _forward(
         self,
-        h,
-        h_context=None,
-        label=None,
+        features_batch,
+        labels=None,
         instance_eval=False,
         return_features=False,
         attention_only=False,
     ):
-        h = h.squeeze()
-        if h_context is not None:
-            h_context = h_context.squeeze()
-        if label is not None:
-            label = label.squeeze(dim=0)
+        logits = []
+        preds = []
+        A = []
+        results_dict = []
+        for idx, singlePatientFeatures in enumerate(features_batch):
+            h = singlePatientFeatures["features"]
+            h = h.squeeze()
+            if (
+                self.multires_aggregation is not None
+                and "features_context" in singlePatientFeatures
+            ):
+                h_context = singlePatientFeatures["features_context"]
+                h_context = h_context.squeeze()
+            else:
+                h_context = None
 
-        return self.model.forward(
-            h=h,
-            h_context=h_context,
-            label=label,
-            instance_eval=instance_eval,
-            return_features=return_features,
-            attention_only=attention_only,
-        )
+            if labels is not None:
+                label = labels[idx]
+                label = label.squeeze(dim=0) if label is not None else None
+            else:
+                label = None
+
+            _logits, _preds, _, _A, _results_dict = self.model.forward(
+                h=h,
+                h_context=h_context,
+                label=label,
+                instance_eval=instance_eval,
+                return_features=return_features,
+                attention_only=attention_only,
+            )
+            logits.append(_logits)
+            preds.append(_preds)
+            A.append(_A)
+            results_dict.append(_results_dict)
+
+        return torch.vstack(logits), torch.vstack(preds), None, A, results_dict
 
 
 if __name__ == "__main__":
-    # create test data and model
-    n_features = 384
-    n_classes = 1
-    n_samples = 10
+    from dotmap import DotMap
 
-    features = torch.rand(n_samples, n_features)
+    config = DotMap(
+        {
+            "num_classes": 1,
+            "model": {
+                "input_shape": 256,
+                "classifier": "minet_ds",
+            },
+            "trainer": {
+                "optimizer_params": {"lr": 1e-3},
+                "batch_size": 1,
+                "loss": ["ce"],
+                "classes_loss_weights": None,
+                "multi_loss_weights": None,
+                "samples_per_class": None,
+                "sync_dist": False,
+                "l1_reg_weight": None,
+                "l2_reg_weight": None,
+            },
+            "devices": {
+                "nodes": 1,
+                "gpus": 1,
+            },
+            "metrics": {"threshold": 0.5},
+        }
+    )
 
-    model = CLAM_SB(
-        gate=True,
-        size=[384, 256, 128],
-        dropout=True,
-        k_sample=8,
+    y = torch.randint(0, 2, [32, 1])
+
+    data = dict(
+        features=[dict(features=torch.rand(10, 384)) for _ in range(32)],
+        labels=y,
+        slide_name="tmp",
+    )
+
+    model = CLAM_PL(
+        config,
         n_classes=2,
-        instance_loss_fn="svm",
-        subtyping=False,
-        linear_feature=False,
-        multires_aggregation={
-            "features": "add",
-            "attention": None,
-        },
+        size=[384, 256, 128],
+        dropout=False,
+        instance_eval=True,
         attention_depth=1,
         classifier_depth=1,
     )
 
-    # test forward pass
-    logits, preds, _, A, _ = model.forward(features, features, return_features=False)
-    print(logits.shape, preds.shape, A.shape)
+    o = model.forward(data)
+
+    print(o)

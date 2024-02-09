@@ -73,7 +73,7 @@ class CSMIL(nn.Module):
             x_exp = x_exp * mask.float()
         return x_exp / x_exp.sum(1).unsqueeze(-1)
 
-    def forward(self, x, mask=None):
+    def forward(self, x, mask=None, return_features=False):
 
         "x is a tensor list"
         res = []
@@ -92,6 +92,8 @@ class CSMIL(nn.Module):
             res.append(final_output)
 
         h = torch.cat(res)
+        # h -> [n_clusters, n_patches, n_features, n_resolutions, 1] for concat
+        # h -> [n_clusters, n_patches, n_features, 1, 1] for others
 
         b = h.size(0)
         c = h.size(1)
@@ -107,12 +109,9 @@ class CSMIL(nn.Module):
 
         logits = self.fc6(M)
 
-        if self.n_classes == 1:
-            preds = torch.sigmoid(logits)
-        else:
-            preds = torch.softmax(logits, dim=1)
-
-        return logits, preds
+        if return_features:
+            return logits, M
+        return logits
 
 
 class CSMIL_PL(BaseMILModel):
@@ -124,9 +123,8 @@ class CSMIL_PL(BaseMILModel):
         cluster_num: int = 1,
         multires_aggregation: Union[None, str] = None,
     ):
-        super(CSMIL_PL, self).__init__(config, n_classes=n_classes)
+        super(CSMIL_PL, self).__init__(config, n_classes=n_classes, size=[size])
 
-        assert self.n_classes > 0, "n_classes must be greater than 0"
         if self.n_classes == 2:
             self.n_classes = 1
 
@@ -136,61 +134,31 @@ class CSMIL_PL(BaseMILModel):
             cluster_num=cluster_num, feature_size=size, n_classes=self.n_classes
         )
 
-    def forward(self, batch, is_predict=False):
-        # Batch
-        features, target = batch["features"], batch["labels"]
-
-        # Prediction
-        logits, preds = self._forward(features)
-        logits = logits.squeeze(dim=1)
-        target = target.squeeze(dim=1)
-
-        loss = None
-        if not is_predict:
-            loss = self.loss.forward(
-                logits, target.float() if self.n_classes == 1 else target
-            )
-
-        return {
-            "target": target,
-            "preds": preds,
-            "loss": loss,
-            "slide_name": batch["slide_name"],
-        }
-
-    def _forward(self, features):
-        h = [features[key] for key in features]
-        if self.multires_aggregation == "concat":
-            h = torch.stack(h, dim=-1)
-        else:
-            h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
+    def _forward(self, features_batch):
+        logits = []
+        for singlePatientFeatures in features_batch:
+            h: List[torch.Tensor] = [
+                singlePatientFeatures[key] for key in singlePatientFeatures
+            ]
+            if self.multires_aggregation == "concat":
+                h = torch.stack(h, dim=-1)
+            elif self.multires_aggregation == "bilinear":
+                assert len(h) == 2
+                h = self.bilinear(h[0], h[1])
+                h = h.unsqueeze(dim=-1)
+            elif self.multires_aggregation == "linear":
+                assert len(h) == 2
+                h = self.linear_agg_target(h[0]) + self.linear_agg_context(h[1])
+                h = h.unsqueeze(dim=-1)
+            else:
+                h: torch.Tensor = aggregate_features(
+                    h, method=self.multires_aggregation
+                )
+                h = h.unsqueeze(dim=-1)
             h = h.unsqueeze(dim=-1)
-        h = h.unsqueeze(dim=-1)
-        if len(h.shape) == 4:
-            h = h.unsqueeze(dim=0)
-        # h -> [n_clusters, n_patches, n_features, n_resolutions, 1]
-        return self.model.forward(h)
-
-
-if __name__ == "__main__":
-    # create test data and model
-    n_features = 1024
-    n_classes = 3
-    n_samples = 100
-
-    loss = nn.CrossEntropyLoss()
-    # loss = nn.BCEWithLogitsLoss()
-    target = torch.from_numpy(np.array([[1]]))
-    features = torch.rand(1, n_samples, n_features, 2, 1)
-
-    model = CSMIL(cluster_num=1, feature_size=n_features, n_classes=n_classes)
-
-    # test forward
-    logits, preds = model.forward(features, None)
-
-    logits = logits.squeeze(dim=1)
-    target = target.squeeze(dim=1)
-
-    _loss = loss.forward(logits, target.float() if n_classes == 1 else target)
-
-    print(_loss)
+            if len(h.shape) == 4:
+                h = h.unsqueeze(dim=0)
+            # h -> [n_clusters, n_patches, n_features, n_resolutions, 1] here n_clusters = 1, since we don't apply clustering as the original csmil paper
+            _logits = self.model.forward(h)
+            logits.append(_logits)
+        return torch.vstack(logits)
