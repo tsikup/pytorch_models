@@ -368,7 +368,7 @@ class BaseModel(L.LightningModule):
         elif mode in ["eval", "test"]:
             metrics = self.test_metrics
         if self.n_classes in [1, 2]:
-            if len(preds.shape) == 2:
+            if len(preds.shape) == 2 and preds.shape[1] > 1:
                 preds = preds[:, 1]
             metrics(preds.view(-1), target.view(-1))
         else:
