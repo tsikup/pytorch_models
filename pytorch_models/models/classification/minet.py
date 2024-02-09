@@ -401,7 +401,7 @@ class MINet_PL(BaseMILModel):
         pooling_mode="max",
         multires_aggregation: Union[None, str] = None,
     ):
-        super(MINet_PL, self).__init__(config, n_classes=n_classes, size=size)
+        super(MINet_PL, self).__init__(config, n_classes=n_classes, size=size, multires_aggregation=multires_aggregation)
         if self.n_classes == 2:
             self.n_classes = 1
 
@@ -412,7 +412,6 @@ class MINet_PL(BaseMILModel):
 
         self.dropout = dropout
         self.pooling_mode = pooling_mode
-        self.multires_aggregation = multires_aggregation
 
         self.model = get_minet_model(
             config,

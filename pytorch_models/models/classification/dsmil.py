@@ -164,8 +164,7 @@ class DSMIL_PL(BaseMILModel):
     ):
         if n_classes == 2:
             n_classes = 1
-        self.multires_aggregation = multires_aggregation
-        super(DSMIL_PL, self).__init__(config, n_classes=n_classes, size=size)
+        super(DSMIL_PL, self).__init__(config, n_classes=n_classes, size=size, multires_aggregation=multires_aggregation)
         assert len(size) >= 2, "size must be a tuple with 2 or more elements"
         self.model = DSMIL(
             size=size,

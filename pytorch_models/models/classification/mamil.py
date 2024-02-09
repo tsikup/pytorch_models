@@ -108,14 +108,13 @@ class MAMIL_PL(BaseMILModel):
         dropout: bool = True,
         multires_aggregation: Union[None, str] = None,
     ):
-        super(MAMIL_PL, self).__init__(config, n_classes=n_classes, size=size)
+        super(MAMIL_PL, self).__init__(config, n_classes=n_classes, size=size, multires_aggregation=multires_aggregation)
         assert (
             len(size) >= 2
         ), "size must be a tuple of (n_features, layer1_size, layer2_size, ...)"
         if self.n_classes == 2:
             self.n_classes = 1
 
-        self.multires_aggregation = multires_aggregation
         self.dropout = dropout
 
         self.model = MultiAttentionMIL(self.n_classes, size, use_dropout=self.dropout)

@@ -143,7 +143,9 @@ class DTFD(nn.Module):
         feats = torch.cat(slide_pseudo_feat, dim=0)  ### numGroup x fs
         logits = self.UClassifier(feats)  ### 1 x num_cls
 
-        return logits, slide_sub_logits, feats
+        if return_features:
+            return logits, slide_sub_logits, feats
+        return logits, slide_sub_logits
 
 
 class DTFD_PL(BaseMILModel):
@@ -159,9 +161,8 @@ class DTFD_PL(BaseMILModel):
     ):
         if n_classes == 2:
             n_classes = 1
-        super(DTFD_PL, self).__init__(config, n_classes=n_classes, size=size)
+        super(DTFD_PL, self).__init__(config, n_classes=n_classes, size=size, multires_aggregation=multires_aggregation)
         assert len(size) == 3, "size must be a tuple of size 3"
-        self.multires_aggregation = multires_aggregation
         self.model = DTFD(
             size=size,
             n_classes=self.n_classes,

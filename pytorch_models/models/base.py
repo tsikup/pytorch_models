@@ -368,6 +368,8 @@ class BaseModel(L.LightningModule):
         elif mode in ["eval", "test"]:
             metrics = self.test_metrics
         if self.n_classes in [1, 2]:
+            if len(preds.shape) == 2:
+                preds = preds[:, 1]
             metrics(preds.view(-1), target.view(-1))
         else:
             metrics(preds, target.view(-1))
@@ -481,11 +483,14 @@ class BaseMILModel(BaseModel):
         self,
         config: DotMap,
         n_classes: int,
+        multires_aggregation: Union[Dict[str, str], str] = None,
         size: List[int] = None,
     ):
         super(BaseMILModel, self).__init__(
             config, n_classes=n_classes, in_channels=None, segmentation=False
         )
+        
+        self.multires_aggregation=multires_aggregation
 
         if (
             self.config.model.classifier != "clam"

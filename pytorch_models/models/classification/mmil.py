@@ -228,7 +228,7 @@ class MultipleMILTransformer(nn.Module):
         # ---> init
         x = self.fc1(x)
         if self.ape:
-            x = x + self.absolute_pos_embed.expand(1, x.shape[1], self.embed_dim)
+            x = x + self.absolute_pos_embed.expand(1, x.shape[0], self.embed_dim)
 
         if self.mode != "coords":
             x_groups = self.grouping_features(x)
@@ -275,7 +275,7 @@ class MMIL_PL(BaseMILModel):
     ):
         if n_classes == 1:
             n_classes = 2
-        super(MMIL_PL, self).__init__(config, n_classes=n_classes, size=size)
+        super(MMIL_PL, self).__init__(config, n_classes=n_classes, size=size, multires_aggregation=multires_aggregation)
         assert len(size) == 2, "size must be a tuple of size 2"
 
         self.size = size
@@ -284,7 +284,6 @@ class MMIL_PL(BaseMILModel):
         self.grouping_mode = mode
         self.ape = ape
         self.num_layers = num_layers
-        self.multires_aggregation = multires_aggregation
 
         self.model = MultipleMILTransformer(
             in_chans=self.size[0],

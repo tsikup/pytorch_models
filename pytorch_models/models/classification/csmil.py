@@ -123,12 +123,10 @@ class CSMIL_PL(BaseMILModel):
         cluster_num: int = 1,
         multires_aggregation: Union[None, str] = None,
     ):
-        super(CSMIL_PL, self).__init__(config, n_classes=n_classes, size=[size])
+        super(CSMIL_PL, self).__init__(config, n_classes=n_classes, multires_aggregation=multires_aggregation, size=[size])
 
         if self.n_classes == 2:
             self.n_classes = 1
-
-        self.multires_aggregation = multires_aggregation
 
         self.model = CSMIL(
             cluster_num=cluster_num, feature_size=size, n_classes=self.n_classes

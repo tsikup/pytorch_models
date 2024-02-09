@@ -780,7 +780,7 @@ class CLAM_PL(BaseMILModel):
         attention_depth=None,
         classifier_depth=None,
     ):
-        super(CLAM_PL, self).__init__(config, n_classes=n_classes)
+        super(CLAM_PL, self).__init__(config, n_classes=n_classes, multires_aggregation=multires_aggregation)
 
         self.size = size
         self.dropout = dropout
@@ -789,7 +789,6 @@ class CLAM_PL(BaseMILModel):
         self.subtyping = subtyping
         self.instance_eval = instance_eval
         self.instance_loss_weight = instance_loss_weight
-        self.multires_aggregation = multires_aggregation
         self.multibranch = multibranch
         self.attention_depth = attention_depth
         self.classifier_depth = classifier_depth
