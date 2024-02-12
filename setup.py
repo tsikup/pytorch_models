@@ -27,6 +27,7 @@ setup(
         "pytorch_models.models.survival",
         "pytorch_models.models.fair",
         "pytorch_models.models.fair.lnl",
+        "pytorch_models.models.fair.group_dro",
     ],
     url="https://github.com/tsikup/pytorch_models",
     license="MIT",
