@@ -4,300 +4,112 @@ from typing import List, Tuple, Union
 import torch
 import torch.nn as nn
 from dotmap import DotMap
-from pytorch_models.models.base import BaseMILModel_LNL
+from pytorch_models.models.base_fair import BaseMILModel_LNL
+from pytorch_models.models.classification.minet import (
+    ScorePooling,
+    FeaturePooling,
+    RC_Block,
+    MI_Net_DS,
+    MI_Net,
+    mi_NET,
+    MI_Net_RC,
+)
 from pytorch_models.models.fair.utils import grad_reverse
 from pytorch_models.utils.tensor import aggregate_features
 
 
-def max_pooling(x):
-    """Max Pooling to obtain aggregation.
-    Parameters
-    ---------------------
-    x : Tensor (N x d)
-        Input data to do max-pooling,
-        where N is number of instances in one bag,
-        and d is dimension of instance feature
-        (when d = 1, x means instance scores; when d > 1, x means instance representations).
-    Return
-    ---------------------
-    output : Tensor (1 x d)
-        Output of max-pooling,
-        where d is dimension of instance feature
-        (when d = 1, the output means bag score; when d > 1, the output means bag representation).
-    """
-    output = torch.max(x, dim=0, keepdim=True)[0]
-    return output
-
-
-def mean_pooling(x):
-    """Mean Pooling to obtain aggregation.
-    Parameters
-    ---------------------
-    x : Tensor (N x d)
-        Input data to do mean-pooling,
-        where N is number of instances in one bag,
-        and d is dimension of instance feature
-        (when d = 1, x means instance scores; when d > 1, x means instance representations).
-    Return
-    ---------------------
-    output : Tensor (1 x d)
-        Output of mean-pooling,
-        where d is dimension of instance feature
-        (when d = 1, the output means bag score; when d > 1, the output means bag representation).
-    """
-    output = torch.mean(x, dim=0, keepdim=True)
-    return output
-
-
-def LSE_pooling(x):
-    """LSE Pooling to obtain aggregation.
-    Do LSE(log-sum-exp) pooling, like LSE(x1, x2, x3) = log(exp(x1)+exp(x2)+exp(x3)).
-    Parameters
-    ---------------------
-    x : Tensor (N x d)
-        Input data to do LSE-pooling,
-        where N is number of instances in one bag,
-        and d is dimension of instance feature
-        (when d = 1, x means instance scores; when d > 1, x means instance representations).
-    Return
-    ---------------------
-    output : Tensor (1 x d)
-        Output of LSE-pooling,
-        where d is dimension of instance feature
-        (when d = 1, the output means bag score; when d > 1, the output means bag representation).
-    """
-    output = torch.log(torch.mean(torch.exp(x), dim=0, keepdim=True))
-    return output
-
-
-def choice_pooling(x, pooling_mode):
-    """Choice the pooling mode
-    Parameters
-    -------------------
-    x : Tensor (N x d)
-        Input data to do MIL-pooling,
-        where N is number of instances in one bag,
-        and d is dimension of instance feature
-        (when d = 1, x means instance scores; when d > 1, x means instance representations).
-    pooling_mode : string
-        Choice the pooling mode for MIL pooling.
-    Return
-    --------------------
-    output : Tensor (1 x d)
-            Output of MIL-pooling,
-            where d is dimension of instance feature
-            (when d = 1, the output means bag score; when d > 1, the output means bag representation).
-    """
-    if pooling_mode == "max":
-        return max_pooling(x)
-    if pooling_mode == "lse":
-        return LSE_pooling(x)
-    if pooling_mode in ["ave", "mean"]:
-        return mean_pooling(x)
-
-
-class ScorePooling(nn.Module):
-    def __init__(self, D, C, pooling_mode="max"):
-        super(ScorePooling, self).__init__()
-        self.D = D
-        self.C = C
-        self.fc = nn.Linear(D, C)
-        if C == 1:
-            self.act = nn.Sigmoid()
-        elif C > 2:
-            raise NotImplementedError
-            self.act = nn.Softmax()
-        self.pooling_mode = pooling_mode
-
-    def forward(self, x):
-        x = self.fc(x)
-        x = self.act(x)
-        return choice_pooling(x, self.pooling_mode), None
-
-
-class FeaturePooling(nn.Module):
-    def __init__(self, D, C, pooling_mode="max"):
-        super(FeaturePooling, self).__init__()
-        self.D = D
-        self.C = C
-        self.fc = nn.Linear(D, C)
-        if C == 1:
-            self.act = nn.Sigmoid()
-        elif C > 2:
-            self.act = nn.Softmax()
-        self.pooling_mode = pooling_mode
-
-    def forward(self, x):
-        x = choice_pooling(x, self.pooling_mode)
-        x = self.fc(x)
-        output = self.act(x)
-        return output, x
-
-
-class RC_Block(nn.Module):
-    def __init__(self, pooling_mode="max"):
-        super(RC_Block, self).__init__()
-        self.pooling_mode = pooling_mode
-
-    def forward(self, x):
-        return choice_pooling(x, self.pooling_mode)
-
-
-class _mi_NET_LNL(nn.Module):
-    def __init__(self, size=(384, 256, 128, 64), n_classes=1, pooling_mode="max"):
-        super(_mi_NET_LNL, self).__init__()
-        self.fc1 = nn.Sequential(nn.Linear(size[0], size[1]), nn.ReLU())
-        self.fc2 = nn.Sequential(nn.Linear(size[1], size[2]), nn.ReLU())
-        self.fc3 = nn.Sequential(nn.Linear(size[2], size[3]), nn.ReLU())
-        self.dropout = nn.Dropout(p=0.5)
-        self.sp = ScorePooling(size[3], n_classes, pooling_mode=pooling_mode)
-
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.fc2(x)
-        x = self.fc3(x)
-        x = self.dropout(x)
-        output, _ = self.sp(x)
-        return output, x
-
-
 class mi_NET_LNL(nn.Module):
     def __init__(
-        self, size=(384, 256, 128, 64), n_classes=1, n_classes_aux=1, pooling_mode="max"
+        self, size=(384, 256, 128, 64), n_classes=1, n_groups=1, pooling_mode="max"
     ):
         super(mi_NET_LNL, self).__init__()
         self.size = size
         self.n_classes = n_classes
         if self.n_classes == 2:
             self.n_classes = 1
-        self.n_classes_aux = n_classes_aux
-        if self.n_classes_aux == 2:
-            self.n_classes_aux = 1
+        self.n_groups = n_groups
+        if self.n_groups == 2:
+            self.n_groups = 1
         self.pooling_mode = pooling_mode
 
-        self.main_model = _mi_NET_LNL(size, n_classes, pooling_mode)
+        self.main_model = mi_NET(
+            size, n_classes, pooling_mode, return_features=True, return_preds=True
+        )
         self.aux_model = ScorePooling(
-            size[3], self.n_classes_aux, pooling_mode=self.pooling_mode
+            size[3], self.n_groups, pooling_mode=self.pooling_mode
         )
 
     def forward(self, x, is_adv=True):
-        output, x = self.main_model(x)
+        preds, x = self.main_model(x)
         if not is_adv:
             x_aux = grad_reverse(x)
         else:
             x_aux = x
-        output_aux, _ = self.aux_model(x_aux)
-        return output, output_aux, None, None
-
-
-class _MI_Net_LNL(nn.Module):
-    def __init__(self, size=(384, 256, 128, 64), n_classes=1, pooling_mode="max"):
-        super(_MI_Net_LNL, self).__init__()
-        self.fc1 = nn.Sequential(nn.Linear(size[0], size[1]), nn.ReLU())
-        self.fc2 = nn.Sequential(nn.Linear(size[1], size[2]), nn.ReLU())
-        self.fc3 = nn.Sequential(nn.Linear(size[2], size[3]), nn.ReLU())
-        self.dropout = nn.Dropout(p=0.5)
-        self.fp = FeaturePooling(size[3], n_classes, pooling_mode=pooling_mode)
-
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.fc2(x)
-        x = self.fc3(x)
-        x = self.dropout(x)
-        output, logits = self.fp(x)
-        return output, x, logits
+        preds_aux = self.aux_model(x_aux)
+        return preds, preds_aux, None, None
 
 
 class MI_Net_LNL(nn.Module):
     def __init__(
-        self, size=(384, 256, 128, 64), n_classes=1, n_classes_aux=1, pooling_mode="max"
+        self, size=(384, 256, 128, 64), n_classes=1, n_groups=1, pooling_mode="max"
     ):
         super(MI_Net_LNL, self).__init__()
         self.size = size
         self.n_classes = n_classes
         if self.n_classes == 2:
             self.n_classes = 1
-        self.n_classes_aux = n_classes_aux
-        if self.n_classes_aux == 2:
-            self.n_classes_aux = 1
+        self.n_groups = n_groups
+        if self.n_groups == 2:
+            self.n_groups = 1
         self.pooling_mode = pooling_mode
 
-        self.main_model = _MI_Net_LNL(size, n_classes, pooling_mode)
+        self.main_model = MI_Net(
+            size, n_classes, pooling_mode, return_preds=True, return_features=True
+        )
         self.aux_model = FeaturePooling(
-            size[3], self.n_classes_aux, pooling_mode=self.pooling_mode
+            size[3], self.n_groups, pooling_mode=self.pooling_mode
         )
 
     def forward(self, x, is_adv=True):
-        output, x, logits = self.main_model(x)
+        preds, logits, feats = self.main_model(x)
         if not is_adv:
-            x_aux = grad_reverse(x)
+            x_aux = grad_reverse(feats)
         else:
-            x_aux = x
-        output_aux, logits_aux = self.aux_model(x_aux)
-        return output, output_aux, logits, logits_aux
-
-
-class _MI_Net_DS_LNL(nn.Module):
-    def __init__(self, size=(384, 256, 128, 64), n_classes=1, pooling_mode="max"):
-        super(_MI_Net_DS_LNL, self).__init__()
-        self.fc1 = nn.Sequential(nn.Linear(size[0], size[1]), nn.ReLU())
-        self.fc2 = nn.Sequential(nn.Linear(size[1], size[2]), nn.ReLU())
-        self.fc3 = nn.Sequential(nn.Linear(size[2], size[3]), nn.ReLU())
-
-        self.dropout1 = nn.Dropout(p=0.5)
-        self.dropout2 = nn.Dropout(p=0.5)
-        self.dropout3 = nn.Dropout(p=0.5)
-
-        self.fp1 = FeaturePooling(size[1], n_classes, pooling_mode=pooling_mode)
-        self.fp2 = FeaturePooling(size[2], n_classes, pooling_mode=pooling_mode)
-        self.fp3 = FeaturePooling(size[3], n_classes, pooling_mode=pooling_mode)
-
-    def forward(self, x, is_adv=True):
-        x1 = self.fc1(x)
-        x1 = self.dropout1(x1)
-        preds1, logits1 = self.fp1(x1)
-
-        x2 = self.fc2(x1)
-        x2 = self.dropout2(x2)
-        preds2, logits2 = self.fp2(x2)
-
-        x3 = self.fc3(x2)
-        x3 = self.dropout3(x3)
-        preds3, logits3 = self.fp3(x3)
-
-        return preds1, preds2, preds3, x1, x2, x3, logits1, logits2, logits3
+            x_aux = feats
+        preds_aux, logits_aux = self.aux_model(x_aux)
+        return preds, logits, logits_aux
 
 
 class MI_Net_DS_LNL(nn.Module):
     def __init__(
-        self, size=(384, 256, 128, 64), n_classes=1, n_classes_aux=1, pooling_mode="max"
+        self, size=(384, 256, 128, 64), n_classes=1, n_groups=1, pooling_mode="max"
     ):
         super(MI_Net_DS_LNL, self).__init__()
         self.size = size
         self.n_classes = n_classes
         if self.n_classes == 2:
             self.n_classes = 1
-        self.n_classes_aux = n_classes_aux
-        if self.n_classes_aux == 2:
-            self.n_classes_aux = 1
+        self.n_groups = n_groups
+        if self.n_groups == 2:
+            self.n_groups = 1
         self.pooling_mode = pooling_mode
 
-        self.main_model = _MI_Net_DS_LNL(size, n_classes, pooling_mode)
+        self.main_model = MI_Net_DS(
+            size, n_classes, pooling_mode, return_features=True, return_preds=False
+        )
 
         self.fp1_aux = FeaturePooling(
-            size[1], self.n_classes_aux, pooling_mode=self.pooling_mode
+            size[1], self.n_groups, pooling_mode=self.pooling_mode
         )
         self.fp2_aux = FeaturePooling(
-            size[2], self.n_classes_aux, pooling_mode=self.pooling_mode
+            size[2], self.n_groups, pooling_mode=self.pooling_mode
         )
         self.fp3_aux = FeaturePooling(
-            size[3], self.n_classes_aux, pooling_mode=self.pooling_mode
+            size[3], self.n_groups, pooling_mode=self.pooling_mode
         )
 
     def forward(self, x, is_adv=True):
-        preds1, preds2, preds3, x1, x2, x3, logits1, logits2, logits3 = self.main_model(
-            x
-        )
+        preds, logits, (x1, x2, x3) = self.main_model(x)
 
         if not is_adv:
             x1_aux = grad_reverse(x1)
@@ -308,82 +120,32 @@ class MI_Net_DS_LNL(nn.Module):
             x2_aux = x2
             x3_aux = x3
 
-        preds1_aux, logits1_aux = self.fp1_aux(x1_aux)
-        preds2_aux, logits2_aux = self.fp2_aux(x2_aux)
-        preds3_aux, logits3_aux = self.fp3_aux(x3_aux)
+        preds1_aux, logits1_aux, feats1_aux = self.fp1_aux(x1_aux)
+        preds2_aux, logits2_aux, feats2_aux = self.fp2_aux(x2_aux)
+        preds3_aux, logits3_aux, feats3_aux = self.fp3_aux(x3_aux)
 
         return (
-            torch.mean(torch.stack([preds1, preds2, preds3], dim=-1), dim=-1),
+            preds,
             torch.mean(
                 torch.stack([preds1_aux, preds2_aux, preds3_aux], dim=-1), dim=-1
             ),
-            torch.mean(torch.stack([logits1, logits2, logits3], dim=-1), dim=-1),
+            logits,
             torch.mean(
                 torch.stack([logits1_aux, logits2_aux, logits3_aux], dim=-1), dim=-1
             ),
         )
 
 
-class _MI_Net_RC_LNL(nn.Module):
-    def __init__(self, size=(384, 128), n_classes=1, pooling_mode="max"):
-        super(_MI_Net_RC_LNL, self).__init__()
-        if len(size) > 2:
-            p_size = size[:-1]
-            size = size[-2:]
-        else:
-            p_size = size
-
-        self.fc1 = nn.Sequential(
-            *[
-                nn.Sequential(nn.Linear(p_size[i], p_size[i + 1]), nn.ReLU())
-                for i in range(len(p_size) - 1)
-            ]
-        )
-        self.fc2 = nn.Sequential(nn.Linear(size[1], size[1]), nn.ReLU())
-        self.fc3 = nn.Sequential(nn.Linear(size[1], size[1]), nn.ReLU())
-
-        self.dropout1 = nn.Dropout(p=0.5)
-        self.dropout2 = nn.Dropout(p=0.5)
-        self.dropout3 = nn.Dropout(p=0.5)
-
-        self.rc1 = RC_Block(pooling_mode=pooling_mode)
-        self.rc2 = RC_Block(pooling_mode=pooling_mode)
-        self.rc3 = RC_Block(pooling_mode=pooling_mode)
-
-        self.fc = nn.Linear(size[1], n_classes)
-        self.act = nn.Sigmoid() if n_classes == 1 else nn.Softmax()
-
-    def forward(self, x):
-        x1 = self.fc1(x)
-        x1 = self.dropout1(x1)
-        output1 = self.rc1(x1)
-
-        x2 = self.fc2(x1)
-        x2 = self.dropout2(x2)
-        output2 = self.rc2(x2)
-
-        x3 = self.fc3(x2)
-        x3 = self.dropout3(x3)
-        output3 = self.rc3(x3)
-
-        feats = torch.sum(torch.stack([output1, output2, output3], dim=-1), dim=-1)
-        logits = self.fc(feats)
-
-        return self.act(logits), feats, logits
-
-
 class MI_Net_RC_LNL(nn.Module):
-    def __init__(
-        self, size=(384, 128), n_classes=1, n_classes_aux=1, pooling_mode="max"
-    ):
+    def __init__(self, size=(384, 128), n_classes=1, n_groups=1, pooling_mode="max"):
         super(MI_Net_RC_LNL, self).__init__()
         self.size = size
         self.n_classes = n_classes
         if self.n_classes == 2:
             self.n_classes = 1
-        self.n_classes_aux = n_classes_aux
-        if self.n_classes_aux == 2:
-            self.n_classes_aux = 1
+        self.n_groups = n_groups
+        if self.n_groups == 2:
+            self.n_groups = 1
         self.pooling_mode = pooling_mode
 
         if len(size) > 2:
@@ -392,12 +154,14 @@ class MI_Net_RC_LNL(nn.Module):
         else:
             p_size = size
 
-        self.main_model = _MI_Net_RC_LNL(size, n_classes, pooling_mode)
+        self.main_model = MI_Net_RC(
+            size, n_classes, pooling_mode, return_features=True, return_preds=True
+        )
         self.aux_model = nn.Linear(size[1], self.n_classes)
         self.act = nn.Sigmoid() if self.n_classes == 1 else nn.Softmax()
 
     def forward(self, x, is_adv=True):
-        preds, feats, logits = self.main_model(x)
+        preds, logits, feats = self.main_model(x)
         if not is_adv:
             feats_aux = grad_reverse(feats)
         else:
@@ -420,31 +184,27 @@ class MINet_LNL_PL(BaseMILModel_LNL):
         self,
         config: DotMap,
         n_classes: int,
-        n_classes_aux: int,
+        n_groups: int,
         size: Union[List[int], Tuple[int, int]] = None,
         dropout: bool = True,
         pooling_mode="max",
         multires_aggregation: Union[None, str] = None,
     ):
         super(MINet_LNL_PL, self).__init__(
-            config, n_classes=n_classes, n_classes_aux=n_classes_aux
+            config, n_classes=n_classes, n_groups=n_groups
         )
-        assert self.n_classes > 0, "n_classes must be greater than 0"
+        self.n_groups = n_groups
         if self.n_classes > 2:
             raise NotImplementedError
         if self.n_classes == 2:
             self.n_classes = 1
-
-        self.n_classes_aux = n_classes_aux
-        if self.n_classes_aux == 2:
-            self.n_classes_aux = 1
 
         if self.n_classes == 1:
             self.loss = nn.BCELoss()
         else:
             self.loss = nn.NLLLoss()
 
-        if self.n_classes_aux == 1:
+        if self.n_groups == 1:
             self.loss_aux = nn.BCELoss()
         else:
             self.loss_aux = nn.NLLLoss()
@@ -458,7 +218,7 @@ class MINet_LNL_PL(BaseMILModel_LNL):
             self.model = mi_NET_LNL(
                 size=size,
                 n_classes=self.n_classes,
-                n_classes_aux=self.n_classes_aux,
+                n_groups=self.n_groups,
                 pooling_mode=self.pooling_mode,
             )
         elif self.config.model.classifier == "minet":
@@ -466,7 +226,7 @@ class MINet_LNL_PL(BaseMILModel_LNL):
             self.model = MI_Net_LNL(
                 size=size,
                 n_classes=self.n_classes,
-                n_classes_aux=self.n_classes_aux,
+                n_groups=self.n_groups,
                 pooling_mode=self.pooling_mode,
             )
         elif self.config.model.classifier == "minet_ds":
@@ -474,7 +234,7 @@ class MINet_LNL_PL(BaseMILModel_LNL):
             self.model = MI_Net_DS_LNL(
                 size=size,
                 n_classes=self.n_classes,
-                n_classes_aux=self.n_classes_aux,
+                n_groups=self.n_groups,
                 pooling_mode=self.pooling_mode,
             )
         elif self.config.model.classifier == "minet_rc":
@@ -482,7 +242,7 @@ class MINet_LNL_PL(BaseMILModel_LNL):
             self.model = MI_Net_RC_LNL(
                 size=size,
                 n_classes=self.n_classes,
-                n_classes_aux=self.n_classes_aux,
+                n_groups=self.n_groups,
                 pooling_mode=self.pooling_mode,
             )
 
@@ -491,7 +251,7 @@ class MINet_LNL_PL(BaseMILModel_LNL):
         features, target, target_aux = (
             batch["features"],
             batch["labels"],
-            batch["labels_aux"],
+            batch["labels_group"],
         )
 
         # Prediction
@@ -508,7 +268,7 @@ class MINet_LNL_PL(BaseMILModel_LNL):
             _loss_aux_adv = torch.mean(torch.sum(preds_aux * torch.log(preds_aux), 1))
             loss = _loss + _loss_aux_adv * self.aux_lambda
         else:
-            if self.n_classes_aux > 2:
+            if self.n_groups > 2:
                 _loss_aux_mi = self.loss_aux.forward(torch.log(preds_aux), target_aux)
             else:
                 _loss_aux_mi = self.loss_aux.forward(
@@ -664,11 +424,11 @@ if __name__ == "__main__":
     data = dict(
         features=[dict(target=x) for _ in range(32)],
         labels=y,
-        labels_aux=y_aux,
+        labels_group=y_aux,
         slide_name="tmp",
     )
 
-    model = MINet_LNL_PL(config, n_classes=1, n_classes_aux=1, size=[384, 256, 128, 64])
+    model = MINet_LNL_PL(config, n_classes=1, n_groups=1, size=[384, 256, 128, 64])
 
     o = model.forward(data, is_adv=True)
     o2 = model.forward(data, is_adv=False)
