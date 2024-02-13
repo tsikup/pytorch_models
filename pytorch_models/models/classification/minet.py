@@ -409,6 +409,8 @@ class MINet_PL(BaseMILModel):
             self.loss = nn.BCELoss()
         else:
             self.loss = nn.NLLLoss()
+            
+        assert self.batch_size == 1, "Batch size must be 1 for minet models due to an unsolved bug."
 
         self.dropout = dropout
         self.pooling_mode = pooling_mode
@@ -427,7 +429,7 @@ class MINet_PL(BaseMILModel):
         features, target = batch["features"], batch["labels"]
 
         # Prediction
-        preds, logits = self._forward(features)
+        preds, logits = self._forward(features[0])
         preds = preds.squeeze(dim=1)
         target = target.squeeze(dim=1)
         logits = logits.squeeze(dim=1)
@@ -446,27 +448,19 @@ class MINet_PL(BaseMILModel):
             "loss": loss,
             "slide_name": batch["slide_name"],
         }
-
-    def _forward(self, features_batch):
-        preds = []
-        logits = []
-        for singlePatientFeatures in features_batch:
-            h: List[torch.Tensor] = [
-                singlePatientFeatures[key] for key in singlePatientFeatures
-            ]
-            if self.multires_aggregation == "bilinear":
-                assert len(h) == 2
-                h = self.bilinear(h[0], h[1])
-            elif self.multires_aggregation == "linear":
-                assert len(h) == 2
-                h = self.linear_agg_target(h[0]) + self.linear_agg_context(h[1])
-            else:
-                h: torch.Tensor = aggregate_features(
-                    h, method=self.multires_aggregation
-                )
-            if len(h.shape) == 3:
-                h = h.squeeze(dim=0)
-            _preds, _logits = self.model.forward(h)
-            preds.append(_preds)
-            logits.append(_logits)
-        return torch.vstack(logits), torch.vstack(preds)
+    
+    def _forward(self, features):
+        h: List[torch.Tensor] = [features[key] for key in features]
+        if self.multires_aggregation == "bilinear":
+            assert len(h) == 2
+            h = self.bilinear(h[0], h[1])
+        elif self.multires_aggregation == "linear":
+            assert len(h) == 2
+            h = self.linear_agg_target(h[0]) + self.linear_agg_context(h[1])
+        else:
+            h: torch.Tensor = aggregate_features(
+                h, method=self.multires_aggregation
+            )
+        if len(h.shape) == 3:
+            h = h.squeeze(dim=0)
+        return self.model.forward(h)
