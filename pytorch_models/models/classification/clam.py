@@ -183,6 +183,8 @@ class CLAM_SB(nn.Module):
                 elif self.linear_feature == "gelu":
                     _layer = nn.Sequential(_layer, nn.GELU())
                 self.dense_layers = [_layer]
+            
+            self.dense_layers = nn.ModuleList(self.dense_layers)
 
         if isinstance(self.classifier_depth, int):
             self.classifier_size = [size[self.classifier_depth]]
@@ -367,8 +369,8 @@ class CLAM_SB(nn.Module):
         attention_only=False,
     ):
         if self.linear_feature:
-            for idx, _ in enumerate(self.dense_layers):
-                features[idx] = self.dense_layers[idx](features[idx])
+            for idx, _layer in enumerate(self.dense_layers):
+                features[idx] = _layer(features[idx])
 
         if self.use_multires:
             assert (
