@@ -23,7 +23,11 @@ class MMIL_PL_Surv(BaseMILSurvModel):
     ):
         self.multires_aggregation = multires_aggregation
         super(MMIL_PL_Surv, self).__init__(
-            config, n_classes=n_classes, loss_type=loss_type, size=size
+            config,
+            n_classes=n_classes,
+            loss_type=loss_type,
+            size=size,
+            multires_aggregation=multires_aggregation,
         )
 
         assert len(size) == 2, "size must be a tuple of size 2"

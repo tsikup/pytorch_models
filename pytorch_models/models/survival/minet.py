@@ -26,7 +26,11 @@ class MINet_PL_Surv(BaseMILSurvModel):
     ):
         self.multires_aggregation = multires_aggregation
         super(MINet_PL_Surv, self).__init__(
-            config, n_classes=n_classes, loss_type=loss_type, size=size
+            config,
+            n_classes=n_classes,
+            loss_type=loss_type,
+            size=size,
+            multires_aggregation=multires_aggregation,
         )
 
         assert (

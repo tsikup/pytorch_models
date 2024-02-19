@@ -21,7 +21,11 @@ class DTFD_PL_Surv(BaseMILSurvModel):
         multires_aggregation: Union[None, str] = None,
     ):
         super(DTFD_PL_Surv, self).__init__(
-            config, n_classes=n_classes, loss_type=loss_type, size=size
+            config,
+            n_classes=n_classes,
+            loss_type=loss_type,
+            size=size,
+            multires_aggregation=multires_aggregation,
         )
 
         assert len(size) == 3, "size must be a tuple of size 3"

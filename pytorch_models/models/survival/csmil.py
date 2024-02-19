@@ -18,7 +18,11 @@ class CSMIL_PL_Surv(BaseMILSurvModel):
         multires_aggregation: Union[None, str] = None,
     ):
         super(CSMIL_PL_Surv, self).__init__(
-            config, n_classes=n_classes, loss_type=loss_type, size=[size]
+            config,
+            n_classes=n_classes,
+            loss_type=loss_type,
+            size=[size],
+            multires_aggregation=multires_aggregation,
         )
 
         assert (
