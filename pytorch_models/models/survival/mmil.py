@@ -100,9 +100,7 @@ class MMIL_PL_Surv(BaseMILSurvModel):
             if len(h.shape) == 2:
                 h = h.unsqueeze(dim=0)
             logits.append(
-                self.model.forward(h, coords_batch[idx] if coords_batch else None)[
-                    0
-                ].squeeze(dim=1)
+                self.model.forward(h, coords_batch[idx] if coords_batch else None).squeeze(dim=1)
             )
         return torch.stack(logits)
 
