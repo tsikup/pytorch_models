@@ -119,7 +119,7 @@ class CLAM_PL_Surv(BaseMILSurvModel):
         logits = []
         instance_loss = []
         for idx, features in enumerate(features_batch):
-            feats = [features_batch[f].squeeze() for f in features_batch.keys()]
+            feats = [features[f].squeeze() for f in features.keys()]
 
             _logits, _, _, _, _results_dict = self.model.forward(
                 features=feats,
