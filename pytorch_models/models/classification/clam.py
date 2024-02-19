@@ -8,6 +8,8 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from topk.svm import SmoothTop1SVM
+from torch import Tensor
+
 from pytorch_models.models.base import BaseMILModel
 from pytorch_models.utils.tensor import aggregate_features
 
@@ -126,6 +128,16 @@ class CLAM_SB(nn.Module):
             self.multires_aggregation is not None
             and self.multires_aggregation["features"] is not None
         )
+        if (
+            self.multires_aggregation is not None
+            and self.multires_aggregation["resolutions"] is not None
+        ):
+            self.resolutions = self.multires_aggregation["resolutions"]
+            assert isinstance(
+                self.resolutions, list
+            ), "Please give the resolutions array as a list"
+        else:
+            self.resolutions = None
         self.attention_depth = attention_depth
         self.classifier_depth = classifier_depth
         self.linear_feature = linear_feature
@@ -145,47 +157,32 @@ class CLAM_SB(nn.Module):
                     self.multires_aggregation["features"] == "concat"
                     and self.multires_aggregation["attention"] != "late"
                 ):
-                    _size = int(size[0] / 2)
+                    _size = int(size[0] // len(self.resolutions))
                 else:
                     _size = size[0]
-                self.linear_target = nn.Linear(_size, _size)
-                self.linear_context = nn.Linear(_size, _size)
-
-                if self.linear_feature == "relu":
-                    self.linear_target = nn.Sequential(self.linear_target, nn.ReLU())
-                    self.linear_context = nn.Sequential(self.linear_context, nn.ReLU())
-                elif self.linear_feature == "leakyrelu":
-                    self.linear_target = nn.Sequential(
-                        self.linear_target, nn.LeakyReLU()
-                    )
-                    self.linear_context = nn.Sequential(
-                        self.linear_context, nn.LeakyReLU()
-                    )
-                elif self.linear_feature == "prelu":
-                    self.linear_target = nn.Sequential(
-                        self.linear_target, nn.PReLU(num_parameters=_size)
-                    )
-                    self.linear_context = nn.Sequential(
-                        self.linear_context, nn.PReLU(num_parameters=_size)
-                    )
-                elif self.linear_feature == "gelu":
-                    self.linear_target = nn.Sequential(self.linear_target, nn.GELU())
-                    self.linear_context = nn.Sequential(self.linear_context, nn.GELU())
+                self.dense_layers = []
+                for _ in self.resolutions:
+                    _layer = nn.Linear(_size, _size)
+                    if self.linear_feature == "relu":
+                        _layer = nn.Sequential(_layer, nn.ReLU())
+                    elif self.linear_feature == "leakyrelu":
+                        _layer = nn.Sequential(_layer, nn.LeakyReLU())
+                    elif self.linear_feature == "prelu":
+                        _layer = nn.Sequential(_layer, nn.PReLU(num_parameters=_size))
+                    elif self.linear_feature == "gelu":
+                        _layer = nn.Sequential(_layer, nn.GELU())
+                    self.dense_layers.append(_layer)
             else:
-                self.linear_target = nn.Linear(size[0], size[0])
-
+                _layer = nn.Linear(size[0], size[0])
                 if self.linear_feature == "relu":
-                    self.linear_target = nn.Sequential(self.linear_target, nn.ReLU())
+                    _layer = nn.Sequential(_layer, nn.ReLU())
                 elif self.linear_feature == "leakyrelu":
-                    self.linear_target = nn.Sequential(
-                        self.linear_target, nn.LeakyReLU()
-                    )
+                    _layer = nn.Sequential(_layer, nn.LeakyReLU())
                 elif self.linear_feature == "prelu":
-                    self.linear_target = nn.Sequential(
-                        self.linear_target, nn.PReLU(num_parameters=size[0])
-                    )
+                    _layer = nn.Sequential(_layer, nn.PReLU(num_parameters=size[0]))
                 elif self.linear_feature == "gelu":
-                    self.linear_target = nn.Sequential(self.linear_target, nn.GELU())
+                    _layer = nn.Sequential(_layer, nn.GELU())
+                self.dense_layers = [_layer]
 
         if isinstance(self.classifier_depth, int):
             self.classifier_size = [size[self.classifier_depth]]
@@ -363,40 +360,48 @@ class CLAM_SB(nn.Module):
 
     def forward(
         self,
-        h,
-        h_context=None,
+        features: List[Tensor],
         label=None,
         instance_eval=False,
         return_features=False,
         attention_only=False,
     ):
         if self.linear_feature:
-            h = self.linear_target(h)
-            if self.use_multires:
-                h_context = self.linear_context(h_context)
+            for idx, _ in enumerate(self.dense_layers):
+                features[idx] = self.dense_layers[idx](features[idx])
 
         if self.use_multires:
             assert (
-                h_context is not None
+                len(features) > 1
             ), "Multiresolution is enabled.. h_context features should not be None."
             if self.multires_aggregation["attention"] is None:
                 if self.multires_aggregation["features"] not in ["bilinear", "linear"]:
                     h = self._aggregate_multires_features(
-                        [h, h_context],
+                        features,
                         method=self.multires_aggregation["features"],
                         is_attention=False,
                     )
                 elif self.multires_aggregation["features"] == "bilinear":
-                    h = self.bilinear(h, h_context)
+                    assert (
+                        len(features) == 2
+                    ), "Bilinear aggregation requires 2 features."
+                    h = self.bilinear(*features)
                 elif self.multires_aggregation["features"] == "linear":
+                    assert len(features) == 2, "Linear aggregation requires 2 features."
                     h = self._aggregate_multires_features(
-                        [self.linear_agg_target(h), self.linear_agg_context(h_context)],
+                        [
+                            self.linear_agg_target(features[0]),
+                            self.linear_agg_context(features[1]),
+                        ],
                         method="sum",
                         is_attention=False,
                     )
                 A, h = self.attention_net(h)  # NxK
                 A = torch.transpose(A, 1, 0)  # KxN
             else:
+                assert len(features) == 2, "Attention aggregation requires 2 features."
+                h = features[0]
+                h_context = features[1]
                 A, h = self.attention_net(h)
                 A = torch.transpose(A, 1, 0)  # KxN
 
@@ -445,6 +450,10 @@ class CLAM_SB(nn.Module):
                             is_attention=False,
                         )
         else:
+            assert (
+                len(features) == 1
+            ), "Single resolution is enabled but more than 1 res features vector were supplied."
+            h = features[0]
             A, h = self.attention_net(h)
             A = torch.transpose(A, 1, 0)  # KxN
 
@@ -672,19 +681,16 @@ class CLAM_MB(CLAM_SB):
 
     def forward(
         self,
-        h,
-        h_context=None,
+        features: List[Tensor],
         label=None,
         instance_eval=False,
         return_features=False,
         attention_only=False,
     ):
-        device = h.device
-
+        device = features[0].device
         if self.linear_feature:
-            h = self.linear_target(h)
-            if self.use_multires:
-                h_context = self.linear_context(h_context)
+            for idx, _ in enumerate(self.dense_layers):
+                features[idx] = self.dense_layers[idx](features[idx])
 
         # if self.use_bilinear:
         #     h = self.bilinear(h, h_context)
@@ -693,11 +699,11 @@ class CLAM_MB(CLAM_SB):
 
         if self.use_multires:
             assert (
-                h_context is not None
+                len(features) > 1
             ), "Multiresolution is enabled.. h_context features should not be None."
             raise NotImplementedError
         else:
-            A, h = self.attention_net(h)
+            A, h = self.attention_net(features[0])
             A = torch.transpose(A, 1, 0)  # KxN
 
         if self.use_multires and self.multires_aggregation["attention"] == "late":
@@ -780,7 +786,9 @@ class CLAM_PL(BaseMILModel):
         attention_depth=None,
         classifier_depth=None,
     ):
-        super(CLAM_PL, self).__init__(config, n_classes=n_classes, multires_aggregation=multires_aggregation)
+        super(CLAM_PL, self).__init__(
+            config, n_classes=n_classes, multires_aggregation=multires_aggregation
+        )
 
         self.size = size
         self.dropout = dropout
@@ -873,16 +881,9 @@ class CLAM_PL(BaseMILModel):
         A = []
         results_dict = []
         for idx, singlePatientFeatures in enumerate(features_batch):
-            h = singlePatientFeatures["features"]
-            h = h.squeeze()
-            if (
-                self.multires_aggregation is not None
-                and "features_context" in singlePatientFeatures
-            ):
-                h_context = singlePatientFeatures["features_context"]
-                h_context = h_context.squeeze()
-            else:
-                h_context = None
+            feats = [
+                singlePatientFeatures[f].squeeze() for f in singlePatientFeatures.keys()
+            ]
 
             if labels is not None:
                 label = labels[idx]
@@ -891,8 +892,7 @@ class CLAM_PL(BaseMILModel):
                 label = None
 
             _logits, _preds, _, _A, _results_dict = self.model.forward(
-                h=h,
-                h_context=h_context,
+                features=feats,
                 label=label,
                 instance_eval=instance_eval,
                 return_features=return_features,

@@ -119,17 +119,10 @@ class CLAM_PL_Surv(BaseMILSurvModel):
         logits = []
         instance_loss = []
         for idx, features in enumerate(features_batch):
-            h = features["features"]
-            h_context = (
-                features["features_context"]
-                if self.multires_aggregation is not None
-                and "features_context" in features
-                else None
-            )
+            feats = [features_batch[f].squeeze() for f in features_batch.keys()]
 
             _logits, _, _, _, _results_dict = self.model.forward(
-                h=h.squeeze(),
-                h_context=h_context.squeeze() if h_context is not None else None,
+                features=feats,
                 label=event_batch[idx] if event_batch is not None else None,
                 instance_eval=instance_eval,
                 return_features=return_features,
