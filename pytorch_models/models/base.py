@@ -483,14 +483,14 @@ class BaseMILModel(BaseModel):
         self,
         config: DotMap,
         n_classes: int,
-        multires_aggregation: Union[Dict[str, str], str] = None,
+        multires_aggregation: Union[Dict[str, str], str, None] = None,
         size: List[int] = None,
     ):
         super(BaseMILModel, self).__init__(
             config, n_classes=n_classes, in_channels=None, segmentation=False
         )
-        
-        self.multires_aggregation=multires_aggregation
+
+        self.multires_aggregation = multires_aggregation
 
         if (
             self.config.model.classifier != "clam"
@@ -759,10 +759,13 @@ class BaseMILSurvModel(BaseSurvModel):
         n_classes: int,
         loss_type="cox",
         size: List[int] = None,
+        multires_aggregation: Union[Dict[str, str], str, None] = None,
     ):
         super(BaseMILSurvModel, self).__init__(
             config, n_classes=n_classes, in_channels=None, loss_type=loss_type
         )
+
+        self.multires_aggregation = multires_aggregation
 
         if (
             self.config.model.classifier != "clam"

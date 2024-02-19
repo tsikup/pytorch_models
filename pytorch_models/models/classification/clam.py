@@ -183,7 +183,7 @@ class CLAM_SB(nn.Module):
                 elif self.linear_feature == "gelu":
                     _layer = nn.Sequential(_layer, nn.GELU())
                 self.dense_layers = [_layer]
-            
+
             self.dense_layers = nn.ModuleList(self.dense_layers)
 
         if isinstance(self.classifier_depth, int):
