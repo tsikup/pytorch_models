@@ -204,16 +204,22 @@ class CLAM_SB(nn.Module):
             self.classifier_size[0] == size[self.attention_depth]
         ), "Mismatch between attention module output feature size and classifiers' input feature size"
 
-        if self.multires_aggregation["attention"] != "late":
-            __size = size[0]
-        else:
+        if (
+            self.multires_aggregation["attention"]
+            and self.multires_aggregation["attention"] == "late"
+        ):
             __size = self.classifier_size[0]
+        else:
+            __size = size[0]
         if self.multires_aggregation["features"] == "linear":
             self.linear_agg = []
             for _ in self.resolutions:
                 self.linear_agg.append(nn.Linear(__size, __size, bias=False))
             self.linear_agg = nn.ModuleList(self.linear_agg)
-        if self.multires_aggregation["attention"] == "linear":
+        if (
+            self.multires_aggregation["attention"]
+            and self.multires_aggregation["attention"] == "linear"
+        ):
             self.linear_agg_attention = []
             for _ in self.resolutions:
                 self.linear_agg_attention.append(nn.Linear(__size, __size, bias=False))
