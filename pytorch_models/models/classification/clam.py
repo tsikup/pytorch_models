@@ -208,16 +208,16 @@ class CLAM_SB(nn.Module):
             __size = size[0]
         else:
             __size = self.classifier_size[0]
-        if self.multires_aggregation["features"] == "bilinear":
-            self.bilinear = nn.Bilinear(__size, __size, __size)
-        if self.multires_aggregation["attention"] == "bilinear":
-            self.bilinear_attention = nn.Bilinear(__size, __size, __size)
         if self.multires_aggregation["features"] == "linear":
-            self.linear_agg_target = nn.Linear(__size, __size, bias=False)
-            self.linear_agg_context = nn.Linear(__size, __size, bias=False)
+            self.linear_agg = []
+            for _ in self.resolutions:
+                self.linear_agg.append(nn.Linear(__size, __size, bias=False))
+            self.linear_agg = nn.ModuleList(self.linear_agg)
         if self.multires_aggregation["attention"] == "linear":
-            self.linear_agg_attention_target = nn.Linear(__size, __size, bias=False)
-            self.linear_agg_attention_context = nn.Linear(__size, __size, bias=False)
+            self.linear_agg_attention = []
+            for _ in self.resolutions:
+                self.linear_agg_attention.append(nn.Linear(__size, __size, bias=False))
+            self.linear_agg_attention = nn.ModuleList(self.linear_agg_attention)
 
         if (
             self.use_multires
@@ -228,17 +228,20 @@ class CLAM_SB(nn.Module):
             self.classifier_size = [2 * l for l in self.classifier_size]
             self.classifier_size.append(last_layer)
 
-        self.attention_net = self._create_attention_model(
-            size, dropout, gate, n_classes=1
-        )
-
+        self.attention_nets = []
         if self.use_multires and self.multires_aggregation["attention"] is not None:
-            self.attention_context_net = self._create_attention_model(
-                size, dropout, gate, n_classes=1
-            )
             assert (
                 self.multires_aggregation["attention"] != "concat"
             ), "Multiresolution integration at the attention level is enabled.. The aggregation function must not be concat for the attention vectors, because each tile feature vector (either integrated or not) should have a single attention score."
+            for _ in self.resolutions:
+                self.attention_nets.append(
+                    self._create_attention_model(size, dropout, gate, n_classes=1)
+                )
+        else:
+            self.attention_nets = [
+                self._create_attention_model(size, dropout, gate, n_classes=n_classes)
+            ]
+        self.attention_nets = nn.ModuleList(self.attention_nets)
 
         if (
             self.use_multires
@@ -377,77 +380,57 @@ class CLAM_SB(nn.Module):
                 len(features) > 1
             ), "Multiresolution is enabled.. h_context features should not be None."
             if self.multires_aggregation["attention"] is None:
-                if self.multires_aggregation["features"] not in ["bilinear", "linear"]:
+                if self.multires_aggregation["features"] != "linear":
                     h = self._aggregate_multires_features(
                         features,
                         method=self.multires_aggregation["features"],
                         is_attention=False,
                     )
-                elif self.multires_aggregation["features"] == "bilinear":
-                    assert (
-                        len(features) == 2
-                    ), "Bilinear aggregation requires 2 features."
-                    h = self.bilinear(*features)
                 elif self.multires_aggregation["features"] == "linear":
-                    assert len(features) == 2, "Linear aggregation requires 2 features."
+                    h = [self.linear_agg[i](features[i]) for i in range(len(features))]
                     h = self._aggregate_multires_features(
-                        [
-                            self.linear_agg_target(features[0]),
-                            self.linear_agg_context(features[1]),
-                        ],
+                        h,
                         method="sum",
                         is_attention=False,
                     )
-                A, h = self.attention_net(h)  # NxK
+                A, h = self.attention_nets[0](h)  # NxK
                 A = torch.transpose(A, 1, 0)  # KxN
             else:
-                assert len(features) == 2, "Attention aggregation requires 2 features."
-                h = features[0]
-                h_context = features[1]
-                A, h = self.attention_net(h)
-                A = torch.transpose(A, 1, 0)  # KxN
-
-                A_context, h_context = self.attention_context_net(h_context)
-                A_context = torch.transpose(A_context, 1, 0)  # KxN
+                A = []
+                h = []
+                for _ in self.resolutions:
+                    _A, _h = [
+                        self.attention_nets[i](features[i])
+                        for i in range(len(features))
+                    ]
+                    _A = torch.transpose(_A, 1, 0)  # KxN
+                    A.append(_A)
+                    h.append(_h)
 
                 if self.multires_aggregation["attention"] != "late":
-                    if self.multires_aggregation["attention"] not in [
-                        "bilinear",
-                        "linear",
-                    ]:
+                    if self.multires_aggregation["attention"] != "linear":
                         A = self._aggregate_multires_features(
-                            [A, A_context],
+                            A,
                             method=self.multires_aggregation["attention"],
                             is_attention=True,
                         )
-                    elif self.multires_aggregation["attention"] == "bilinear":
-                        A = self.bilinear_attention(A, A_context)
                     elif self.multires_aggregation["attention"] == "linear":
+                        A = [self.linear_agg_attention[i](A[i]) for i in range(len(A))]
                         A = self._aggregate_multires_features(
-                            [
-                                self.linear_agg_attention_target(A),
-                                self.linear_agg_attention_context(A_context),
-                            ],
+                            A,
                             method="sum",
                             is_attention=True,
                         )
-                    if self.multires_aggregation["features"] not in [
-                        "bilinear",
-                        "linear",
-                    ]:
+                    if self.multires_aggregation["features"] != "linear":
                         h = self._aggregate_multires_features(
-                            [h, h_context],
+                            h,
                             method=self.multires_aggregation["features"],
                             is_attention=False,
                         )
-                    elif self.multires_aggregation["features"] == "bilinear":
-                        h = self.bilinear(h, h_context)
                     elif self.multires_aggregation["features"] == "linear":
+                        h = [self.linear_agg[i](h[i]) for i in range(len(h))]
                         h = self._aggregate_multires_features(
-                            [
-                                self.linear_agg_target(h),
-                                self.linear_agg_context(h_context),
-                            ],
+                            h,
                             method="sum",
                             is_attention=False,
                         )
@@ -456,18 +439,19 @@ class CLAM_SB(nn.Module):
                 len(features) == 1
             ), "Single resolution is enabled but more than 1 res features vector were supplied."
             h = features[0]
-            A, h = self.attention_net(h)
+            A, h = self.attention_nets[0](h)
             A = torch.transpose(A, 1, 0)  # KxN
 
         if self.use_multires and self.multires_aggregation["attention"] == "late":
             if attention_only:
-                return A, A_context
+                return A
             A_raw = A
-            A_context_raw = A_context
-            A = F.softmax(A, dim=1)  # softmax over N
-            A_context = F.softmax(A_context, dim=1)  # softmax over N
+
+            for idx in range(len(self.resolutions)):
+                A[idx] = F.softmax(A[idx], dim=1)  # softmax over N
 
             if instance_eval:
+                is_target = [idx == 0 for idx in range(len(self.resolutions))]
                 total_inst_loss = 0.0
                 all_preds = []
                 all_targets = []
@@ -475,7 +459,8 @@ class CLAM_SB(nn.Module):
                 inst_labels = F.one_hot(
                     label.to(torch.int64), num_classes=self.n_classes
                 ).squeeze()  # binarize label
-                for _tmp in ([h, A, True], [h_context, A_context, False]):
+                # for _tmp in ([h, A, True], [h_context, A_context, False]):
+                for _tmp in zip(h, A, is_target):
                     _h, _A, is_target = _tmp
                     for i in range(len(self.instance_classifiers)):
                         inst_label = inst_labels[i].item()
@@ -503,25 +488,19 @@ class CLAM_SB(nn.Module):
 
                 total_inst_loss /= 2
 
-            M = torch.mm(A, h)
-            M_context = torch.mm(A_context, h_context)
-            if self.multires_aggregation["features"] not in [
-                "bilinear",
-                "linear",
-            ]:
+            M = []
+            for idx in range(len(self.resolutions)):
+                M.append(torch.mm(A[idx], h[idx]))
+            if self.multires_aggregation["features"] != "linear":
                 M = self._aggregate_multires_features(
-                    [M, M_context],
+                    M,
                     method=self.multires_aggregation["features"],
                     is_attention=False,
                 )
-            elif self.multires_aggregation["features"] == "bilinear":
-                h = self.bilinear(M, M_context)
             elif self.multires_aggregation["features"] == "linear":
-                h = self._aggregate_multires_features(
-                    [
-                        self.linear_agg_target(M),
-                        self.linear_agg_context(M_context),
-                    ],
+                M = [self.linear_agg[i](M[i]) for i in range(len(M))]
+                M = self._aggregate_multires_features(
+                    M,
                     method="sum",
                     is_attention=False,
                 )
@@ -543,7 +522,7 @@ class CLAM_SB(nn.Module):
                 results_dict.update({"features": M})
             else:
                 results_dict.update({"features": None})
-            return logits, Y_prob, Y_hat, (A_raw, A_context_raw), results_dict
+            return logits, Y_prob, Y_hat, A_raw, results_dict
         else:
             if attention_only:
                 return A
@@ -597,175 +576,175 @@ class CLAM_SB(nn.Module):
             return logits, Y_prob, Y_hat, A_raw, results_dict
 
 
-class CLAM_MB(CLAM_SB):
-    """
-    args:
-        gate: whether to use gated attention network
-        size_arg: config for network size
-        dropout: whether to use dropout
-        k_sample: number of positive/neg patches to sample for instance-level training
-        dropout: whether to use dropout (p = 0.25)
-        n_classes: number of classes
-        instance_loss_fn: loss function to supervise instance-level training
-        subtyping: whether it's a subtyping problem
-        multires_aggregation: whether to use multiresolution aggregation
-        attention_depth: attention module starting size as an index of the size array
-        classifier_depth: classification module starting size as an index of the size array
-    """
-
-    def __init__(
-        self,
-        gate=True,
-        size=None,
-        dropout=True,
-        k_sample=8,
-        n_classes=2,
-        instance_loss_fn="svm",
-        subtyping=False,
-        linear_feature=False,
-        multires_aggregation=None,
-        attention_depth: Union[List[int], int] = 1,
-        classifier_depth: Union[List[int], int] = 1,
-    ):
-        super(CLAM_MB, self).__init__(
-            gate,
-            size,
-            dropout,
-            k_sample,
-            n_classes,
-            instance_loss_fn,
-            subtyping,
-            linear_feature,
-            multires_aggregation,
-            attention_depth,
-            classifier_depth,
-        )
-
-        self.attention_net = None
-        del self.attention_net
-        self.attention_context_net = None
-        del self.attention_context_net
-        self.classifiers = None
-        del self.classifiers
-
-        self.attention_net = self._create_attention_model(
-            size, dropout, gate, n_classes=n_classes
-        )
-
-        if (
-            self.multires_aggregation is not None
-            and self.multires_aggregation["attention"] is not None
-        ):
-            self.attention_context_net = self._create_attention_model(
-                size, dropout, gate, n_classes=n_classes
-            )
-
-        # use an indepdent linear layer to predict each class
-        if len(self.classifier_size) > 1:
-            bag_classifiers = []  # use an indepdent linear layer to predict each class
-            for _ in range(n_classes):
-                _classifier = []
-                for idx, _ in enumerate(self.classifier_size[:-1]):
-                    _classifier.append(
-                        nn.Linear(
-                            self.classifier_size[idx], self.classifier_size[idx + 1]
-                        )
-                    )
-                _classifier.append(nn.Linear(self.classifier_size[-1], 1))
-                bag_classifiers.append(nn.Sequential(*_classifier))
-        else:
-            bag_classifiers = [
-                nn.Linear(self.classifier_size[0], 1) for _ in range(n_classes)
-            ]
-
-        self.classifiers = nn.ModuleList(bag_classifiers)
-        initialize_weights(self)
-
-    def forward(
-        self,
-        features: List[Tensor],
-        label=None,
-        instance_eval=False,
-        return_features=False,
-        attention_only=False,
-    ):
-        device = features[0].device
-        if self.linear_feature:
-            for idx, _ in enumerate(self.dense_layers):
-                features[idx] = self.dense_layers[idx](features[idx])
-
-        # if self.use_bilinear:
-        #     h = self.bilinear(h, h_context)
-        # elif self.use_bilinear_attention:
-        #     h, h_context = self.bilinear(h, h_context)
-
-        if self.use_multires:
-            assert (
-                len(features) > 1
-            ), "Multiresolution is enabled.. h_context features should not be None."
-            raise NotImplementedError
-        else:
-            A, h = self.attention_net(features[0])
-            A = torch.transpose(A, 1, 0)  # KxN
-
-        if self.use_multires and self.multires_aggregation["attention"] == "late":
-            raise NotImplementedError
-        else:
-            if attention_only:
-                return A
-            A_raw = A
-            A = F.softmax(A, dim=1)  # softmax over N
-
-            if instance_eval:
-                total_inst_loss = 0.0
-                all_preds = []
-                all_targets = []
-                inst_labels = F.one_hot(
-                    label.to(torch.int64), num_classes=self.n_classes
-                ).squeeze()  # binarize label
-
-                for i in range(len(self.instance_classifiers)):
-                    inst_label = inst_labels[i].item()
-                    classifier = self.instance_classifiers[i]
-                    if inst_label == 1:  # in-the-class:
-                        instance_loss, preds, targets = self.inst_eval(
-                            A[i], h, classifier
-                        )
-                        all_preds.extend(preds.cpu().numpy())
-                        all_targets.extend(targets.cpu().numpy())
-                    else:  # out-of-the-class
-                        if self.subtyping:
-                            instance_loss, preds, targets = self.inst_eval_out(
-                                A[i], h, classifier
-                            )
-                            all_preds.extend(preds.cpu().numpy())
-                            all_targets.extend(targets.cpu().numpy())
-                        else:
-                            continue
-                    total_inst_loss += instance_loss
-
-                if self.subtyping:
-                    total_inst_loss /= len(self.instance_classifiers)
-
-            M = torch.mm(A, h)
-            logits = torch.empty(1, self.n_classes).float().to(device)
-            for c in range(self.n_classes):
-                logits[0, c] = self.classifiers[c](M[c])
-            Y_hat = torch.topk(logits, 1, dim=1)[1]
-            Y_prob = F.softmax(logits, dim=1)
-            if instance_eval:
-                results_dict = {
-                    "instance_loss": total_inst_loss,
-                    "inst_labels": np.array(all_targets),
-                    "inst_preds": np.array(all_preds),
-                }
-            else:
-                results_dict = {}
-            if return_features:
-                results_dict.update({"features": M})
-            else:
-                results_dict.update({"features": None})
-            return logits, Y_prob, Y_hat, A_raw, results_dict
+# class CLAM_MB(CLAM_SB):
+#     """
+#     args:
+#         gate: whether to use gated attention network
+#         size_arg: config for network size
+#         dropout: whether to use dropout
+#         k_sample: number of positive/neg patches to sample for instance-level training
+#         dropout: whether to use dropout (p = 0.25)
+#         n_classes: number of classes
+#         instance_loss_fn: loss function to supervise instance-level training
+#         subtyping: whether it's a subtyping problem
+#         multires_aggregation: whether to use multiresolution aggregation
+#         attention_depth: attention module starting size as an index of the size array
+#         classifier_depth: classification module starting size as an index of the size array
+#     """
+#
+#     def __init__(
+#         self,
+#         gate=True,
+#         size=None,
+#         dropout=True,
+#         k_sample=8,
+#         n_classes=2,
+#         instance_loss_fn="svm",
+#         subtyping=False,
+#         linear_feature=False,
+#         multires_aggregation=None,
+#         attention_depth: Union[List[int], int] = 1,
+#         classifier_depth: Union[List[int], int] = 1,
+#     ):
+#         super(CLAM_MB, self).__init__(
+#             gate,
+#             size,
+#             dropout,
+#             k_sample,
+#             n_classes,
+#             instance_loss_fn,
+#             subtyping,
+#             linear_feature,
+#             multires_aggregation,
+#             attention_depth,
+#             classifier_depth,
+#         )
+#
+#         self.attention_net = None
+#         del self.attention_net
+#         self.attention_context_net = None
+#         del self.attention_context_net
+#         self.classifiers = None
+#         del self.classifiers
+#
+#         self.attention_net = self._create_attention_model(
+#             size, dropout, gate, n_classes=n_classes
+#         )
+#
+#         if (
+#             self.multires_aggregation is not None
+#             and self.multires_aggregation["attention"] is not None
+#         ):
+#             self.attention_context_net = self._create_attention_model(
+#                 size, dropout, gate, n_classes=n_classes
+#             )
+#
+#         # use an indepdent linear layer to predict each class
+#         if len(self.classifier_size) > 1:
+#             bag_classifiers = []  # use an indepdent linear layer to predict each class
+#             for _ in range(n_classes):
+#                 _classifier = []
+#                 for idx, _ in enumerate(self.classifier_size[:-1]):
+#                     _classifier.append(
+#                         nn.Linear(
+#                             self.classifier_size[idx], self.classifier_size[idx + 1]
+#                         )
+#                     )
+#                 _classifier.append(nn.Linear(self.classifier_size[-1], 1))
+#                 bag_classifiers.append(nn.Sequential(*_classifier))
+#         else:
+#             bag_classifiers = [
+#                 nn.Linear(self.classifier_size[0], 1) for _ in range(n_classes)
+#             ]
+#
+#         self.classifiers = nn.ModuleList(bag_classifiers)
+#         initialize_weights(self)
+#
+#     def forward(
+#         self,
+#         features: List[Tensor],
+#         label=None,
+#         instance_eval=False,
+#         return_features=False,
+#         attention_only=False,
+#     ):
+#         device = features[0].device
+#         if self.linear_feature:
+#             for idx, _ in enumerate(self.dense_layers):
+#                 features[idx] = self.dense_layers[idx](features[idx])
+#
+#         # if self.use_bilinear:
+#         #     h = self.bilinear(h, h_context)
+#         # elif self.use_bilinear_attention:
+#         #     h, h_context = self.bilinear(h, h_context)
+#
+#         if self.use_multires:
+#             assert (
+#                 len(features) > 1
+#             ), "Multiresolution is enabled.. h_context features should not be None."
+#             raise NotImplementedError
+#         else:
+#             A, h = self.attention_net(features[0])
+#             A = torch.transpose(A, 1, 0)  # KxN
+#
+#         if self.use_multires and self.multires_aggregation["attention"] == "late":
+#             raise NotImplementedError
+#         else:
+#             if attention_only:
+#                 return A
+#             A_raw = A
+#             A = F.softmax(A, dim=1)  # softmax over N
+#
+#             if instance_eval:
+#                 total_inst_loss = 0.0
+#                 all_preds = []
+#                 all_targets = []
+#                 inst_labels = F.one_hot(
+#                     label.to(torch.int64), num_classes=self.n_classes
+#                 ).squeeze()  # binarize label
+#
+#                 for i in range(len(self.instance_classifiers)):
+#                     inst_label = inst_labels[i].item()
+#                     classifier = self.instance_classifiers[i]
+#                     if inst_label == 1:  # in-the-class:
+#                         instance_loss, preds, targets = self.inst_eval(
+#                             A[i], h, classifier
+#                         )
+#                         all_preds.extend(preds.cpu().numpy())
+#                         all_targets.extend(targets.cpu().numpy())
+#                     else:  # out-of-the-class
+#                         if self.subtyping:
+#                             instance_loss, preds, targets = self.inst_eval_out(
+#                                 A[i], h, classifier
+#                             )
+#                             all_preds.extend(preds.cpu().numpy())
+#                             all_targets.extend(targets.cpu().numpy())
+#                         else:
+#                             continue
+#                     total_inst_loss += instance_loss
+#
+#                 if self.subtyping:
+#                     total_inst_loss /= len(self.instance_classifiers)
+#
+#             M = torch.mm(A, h)
+#             logits = torch.empty(1, self.n_classes).float().to(device)
+#             for c in range(self.n_classes):
+#                 logits[0, c] = self.classifiers[c](M[c])
+#             Y_hat = torch.topk(logits, 1, dim=1)[1]
+#             Y_prob = F.softmax(logits, dim=1)
+#             if instance_eval:
+#                 results_dict = {
+#                     "instance_loss": total_inst_loss,
+#                     "inst_labels": np.array(all_targets),
+#                     "inst_preds": np.array(all_preds),
+#                 }
+#             else:
+#                 results_dict = {}
+#             if return_features:
+#                 results_dict.update({"features": M})
+#             else:
+#                 results_dict.update({"features": None})
+#             return logits, Y_prob, Y_hat, A_raw, results_dict
 
 
 class CLAM_PL(BaseMILModel):
@@ -819,19 +798,20 @@ class CLAM_PL(BaseMILModel):
                 classifier_depth=self.classifier_depth,
             )
         else:
-            self.model = CLAM_MB(
-                gate=self.gate,
-                size=self.size,
-                dropout=self.dropout,
-                k_sample=self.k_sample,
-                n_classes=self.n_classes,
-                instance_loss_fn=instance_loss,
-                subtyping=self.subtyping,
-                linear_feature=self.linear_feature,
-                multires_aggregation=self.multires_aggregation,
-                attention_depth=self.attention_depth,
-                classifier_depth=self.classifier_depth,
-            )
+            raise NotImplementedError
+            # self.model = CLAM_MB(
+            #     gate=self.gate,
+            #     size=self.size,
+            #     dropout=self.dropout,
+            #     k_sample=self.k_sample,
+            #     n_classes=self.n_classes,
+            #     instance_loss_fn=instance_loss,
+            #     subtyping=self.subtyping,
+            #     linear_feature=self.linear_feature,
+            #     multires_aggregation=self.multires_aggregation,
+            #     attention_depth=self.attention_depth,
+            #     classifier_depth=self.classifier_depth,
+            # )
 
     def forward(self, batch, is_predict=False):
         # Batch
