@@ -2,7 +2,7 @@ from typing import Dict, List, Tuple, Union
 
 import torch
 from pytorch_models.models.base import BaseMILSurvModel
-from pytorch_models.models.classification.clam import CLAM_SB, CLAM_MB
+from pytorch_models.models.classification.clam import CLAM_SB
 
 
 class CLAM_PL_Surv(BaseMILSurvModel):
@@ -61,19 +61,20 @@ class CLAM_PL_Surv(BaseMILSurvModel):
                 classifier_depth=self.classifier_depth,
             )
         else:
-            self.model = CLAM_MB(
-                gate=self.gate,
-                size=self.size,
-                dropout=self.dropout,
-                k_sample=self.k_sample,
-                n_classes=self.n_classes,
-                instance_loss_fn=instance_loss,
-                subtyping=self.subtyping,
-                linear_feature=self.linear_feature,
-                multires_aggregation=self.multires_aggregation,
-                attention_depth=self.attention_depth,
-                classifier_depth=self.classifier_depth,
-            )
+            raise NotImplementedError
+            # self.model = CLAM_MB(
+            #     gate=self.gate,
+            #     size=self.size,
+            #     dropout=self.dropout,
+            #     k_sample=self.k_sample,
+            #     n_classes=self.n_classes,
+            #     instance_loss_fn=instance_loss,
+            #     subtyping=self.subtyping,
+            #     linear_feature=self.linear_feature,
+            #     multires_aggregation=self.multires_aggregation,
+            #     attention_depth=self.attention_depth,
+            #     classifier_depth=self.classifier_depth,
+            # )
 
     def forward(self, batch, is_predict=False):
         # Batch
