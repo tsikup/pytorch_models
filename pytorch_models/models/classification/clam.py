@@ -398,11 +398,8 @@ class CLAM_SB(nn.Module):
             else:
                 A = []
                 h = []
-                for _ in self.resolutions:
-                    _A, _h = [
-                        self.attention_nets[i](features[i])
-                        for i in range(len(features))
-                    ]
+                for i in range(len(features)):
+                    _A, _h = self.attention_nets[i](features[i])
                     _A = torch.transpose(_A, 1, 0)  # KxN
                     A.append(_A)
                     h.append(_h)
