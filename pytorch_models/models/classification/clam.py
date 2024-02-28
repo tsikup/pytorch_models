@@ -208,7 +208,7 @@ class CLAM_SB(nn.Module):
             __size = self.classifier_size[0]
         else:
             __size = size[0]
-        if self.multires_aggregation["features"] == "linear":
+        if self.use_multires and self.multires_aggregation["features"] == "linear":
             self.linear_agg = []
             for _ in self.resolutions:
                 self.linear_agg.append(nn.Linear(__size, __size, bias=False))
