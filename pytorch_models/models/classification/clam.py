@@ -225,7 +225,7 @@ class CLAM_SB(nn.Module):
             and self.multires_aggregation["features"] == "concat"
         ):
             last_layer = self.classifier_size[-1]
-            self.classifier_size = [2 * l for l in self.classifier_size]
+            self.classifier_size = [len(self.resolutions) * l for l in self.classifier_size]
             self.classifier_size.append(last_layer)
 
         self.attention_nets = []
@@ -248,7 +248,7 @@ class CLAM_SB(nn.Module):
             and self.multires_aggregation["features"] == "concat"
             and self.multires_aggregation["attention"] == "late"
         ):
-            _downsample = 2
+            _downsample = len(self.resolutions)
         else:
             _downsample = 1
 
