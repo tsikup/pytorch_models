@@ -239,7 +239,7 @@ class CLAM_SB(nn.Module):
                 )
         else:
             self.attention_nets = [
-                self._create_attention_model(size, dropout, gate, n_classes=n_classes)
+                self._create_attention_model(size, dropout, gate, n_classes=1)
             ]
         self.attention_nets = nn.ModuleList(self.attention_nets)
 
