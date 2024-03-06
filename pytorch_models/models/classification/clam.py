@@ -325,12 +325,12 @@ class CLAM_SB(nn.Module):
             self.instance_loss_on_gpu = True
         if len(A.shape) == 1:
             A = A.view(1, -1)
-        top_p_ids = torch.topk(A, self.k_sample)[1][-1]
+        top_p_ids = torch.topk(A, min(A.shape[1], self.k_sample))[1][-1]
         top_p = torch.index_select(h, dim=0, index=top_p_ids)
-        top_n_ids = torch.topk(-A, self.k_sample, dim=1)[1][-1]
+        top_n_ids = torch.topk(-A, min(A.shape[1], self.k_sample), dim=1)[1][-1]
         top_n = torch.index_select(h, dim=0, index=top_n_ids)
-        p_targets = self.create_positive_targets(self.k_sample, device)
-        n_targets = self.create_negative_targets(self.k_sample, device)
+        p_targets = self.create_positive_targets(min(A.shape[1], self.k_sample), device)
+        n_targets = self.create_negative_targets(min(A.shape[1], self.k_sample), device)
         all_targets = torch.cat([p_targets, n_targets], dim=0)
         all_instances = torch.cat([top_p, top_n], dim=0)
         logits = classifier(all_instances)
@@ -346,9 +346,9 @@ class CLAM_SB(nn.Module):
             self.instance_loss_on_gpu = True
         if len(A.shape) == 1:
             A = A.view(1, -1)
-        top_p_ids = torch.topk(A, self.k_sample)[1][-1]
+        top_p_ids = torch.topk(A, min(A.shape[1], self.k_sample))[1][-1]
         top_p = torch.index_select(h, dim=0, index=top_p_ids)
-        p_targets = self.create_negative_targets(self.k_sample, device)
+        p_targets = self.create_negative_targets(min(A.shape[1], self.k_sample), device)
         logits = classifier(top_p)
         p_preds = torch.topk(logits, 1, dim=1)[1].squeeze(1)
         instance_loss = self.instance_loss_fn(logits, p_targets)
