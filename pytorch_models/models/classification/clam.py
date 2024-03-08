@@ -128,16 +128,6 @@ class CLAM_SB(nn.Module):
             self.multires_aggregation is not None
             and self.multires_aggregation["features"] is not None
         )
-        if (
-            self.multires_aggregation is not None
-            and self.multires_aggregation["resolutions"] is not None
-        ):
-            self.resolutions = self.multires_aggregation["resolutions"]
-            assert isinstance(
-                self.resolutions, list
-            ), "Please give the resolutions array as a list"
-        else:
-            self.resolutions = None
         self.attention_depth = attention_depth
         self.classifier_depth = classifier_depth
         self.linear_feature = linear_feature
@@ -157,11 +147,11 @@ class CLAM_SB(nn.Module):
                     self.multires_aggregation["features"] == "concat"
                     and self.multires_aggregation["attention"] != "late"
                 ):
-                    _size = int(size[0] // len(self.resolutions))
+                    _size = int(size[0] // self.n_resolutions)
                 else:
                     _size = size[0]
                 self.dense_layers = []
-                for _ in self.resolutions:
+                for _ in range(self.n_resolutions):
                     _layer = nn.Linear(_size, _size)
                     if self.linear_feature == "relu":
                         _layer = nn.Sequential(_layer, nn.ReLU())
@@ -210,12 +200,12 @@ class CLAM_SB(nn.Module):
             __size = size[0]
         if self.use_multires and self.multires_aggregation["features"] == "linear":
             self.linear_agg = []
-            for _ in self.resolutions:
+            for _ in range(self.n_resolutions):
                 self.linear_agg.append(nn.Linear(__size, __size, bias=False))
             self.linear_agg = nn.ModuleList(self.linear_agg)
         if self.use_multires and self.multires_aggregation["attention"] == "linear":
             self.linear_agg_attention = []
-            for _ in self.resolutions:
+            for _ in range(self.n_resolutions):
                 self.linear_agg_attention.append(nn.Linear(__size, __size, bias=False))
             self.linear_agg_attention = nn.ModuleList(self.linear_agg_attention)
 
@@ -226,7 +216,7 @@ class CLAM_SB(nn.Module):
         ):
             last_layer = self.classifier_size[-1]
             self.classifier_size = [
-                len(self.resolutions) * l for l in self.classifier_size
+                self.n_resolutions * l for l in self.classifier_size
             ]
             self.classifier_size.append(last_layer)
 
@@ -235,7 +225,7 @@ class CLAM_SB(nn.Module):
             assert (
                 self.multires_aggregation["attention"] != "concat"
             ), "Multiresolution integration at the attention level is enabled.. The aggregation function must not be concat for the attention vectors, because each tile feature vector (either integrated or not) should have a single attention score."
-            for _ in self.resolutions:
+            for _ in range(self.n_resolutions):
                 self.attention_nets.append(
                     self._create_attention_model(size, dropout, gate, n_classes=1)
                 )
@@ -250,7 +240,7 @@ class CLAM_SB(nn.Module):
             and self.multires_aggregation["features"] == "concat"
             and self.multires_aggregation["attention"] == "late"
         ):
-            _downsample = len(self.resolutions)
+            _downsample = self.n_resolutions
         else:
             _downsample = 1
 
@@ -446,11 +436,11 @@ class CLAM_SB(nn.Module):
                 return A
             A_raw = A
 
-            for idx in range(len(self.resolutions)):
+            for idx in range(self.n_resolutions):
                 A[idx] = F.softmax(A[idx], dim=1)  # softmax over N
 
             if instance_eval:
-                is_target = [idx == 0 for idx in range(len(self.resolutions))]
+                is_target = [idx == 0 for idx in range(self.n_resolutions)]
                 total_inst_loss = 0.0
                 all_preds = []
                 all_targets = []
@@ -488,7 +478,7 @@ class CLAM_SB(nn.Module):
                 total_inst_loss /= 2
 
             M = []
-            for idx in range(len(self.resolutions)):
+            for idx in range(self.n_resolutions):
                 M.append(torch.mm(A[idx], h[idx]))
             if self.multires_aggregation["features"] != "linear":
                 M = self._aggregate_multires_features(
