@@ -113,6 +113,7 @@ class CLAM_SB(nn.Module):
         multires_aggregation=None,
         attention_depth: Union[List[int], int] = 1,
         classifier_depth: Union[List[int], int] = 1,
+        n_resolutions: int = 1,
     ):
         super(CLAM_SB, self).__init__()
 
@@ -131,6 +132,7 @@ class CLAM_SB(nn.Module):
         self.attention_depth = attention_depth
         self.classifier_depth = classifier_depth
         self.linear_feature = linear_feature
+        self.n_resolutions = n_resolutions
 
         if instance_loss_fn == "svm":
             self.instance_loss_fn = SmoothTop1SVM(n_classes=n_classes)
@@ -788,6 +790,7 @@ class CLAM_PL(BaseMILModel):
                 multires_aggregation=self.multires_aggregation,
                 attention_depth=self.attention_depth,
                 classifier_depth=self.classifier_depth,
+                n_resolutions=n_resolutions,
             )
         else:
             raise NotImplementedError
