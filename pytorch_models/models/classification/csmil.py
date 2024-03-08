@@ -122,8 +122,15 @@ class CSMIL_PL(BaseMILModel):
         size: int = 1024,
         cluster_num: int = 1,
         multires_aggregation: Union[None, str] = None,
+        n_resolutions: int = 1,
     ):
-        super(CSMIL_PL, self).__init__(config, n_classes=n_classes, multires_aggregation=multires_aggregation, size=[size])
+        super(CSMIL_PL, self).__init__(
+            config,
+            n_classes=n_classes,
+            multires_aggregation=multires_aggregation,
+            n_resolutions=n_resolutions,
+            size=[size],
+        )
 
         if self.n_classes == 2:
             self.n_classes = 1
@@ -140,13 +147,13 @@ class CSMIL_PL(BaseMILModel):
             ]
             if self.multires_aggregation == "concat":
                 h = torch.stack(h, dim=-1)
-            elif self.multires_aggregation == "bilinear":
-                assert len(h) == 2
-                h = self.bilinear(h[0], h[1])
-                h = h.unsqueeze(dim=-1)
             elif self.multires_aggregation == "linear":
-                assert len(h) == 2
-                h = self.linear_agg_target(h[0]) + self.linear_agg_context(h[1])
+                h = [self.linear_agg[i](h[i]) for i in range(len(h))]
+                h = self._aggregate_multires_features(
+                    h,
+                    method="sum",
+                    is_attention=False,
+                )
                 h = h.unsqueeze(dim=-1)
             else:
                 h: torch.Tensor = aggregate_features(

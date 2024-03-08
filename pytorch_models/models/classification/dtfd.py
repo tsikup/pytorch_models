@@ -158,10 +158,17 @@ class DTFD_PL(BaseMILModel):
         n_bags=3,
         dropout=0.25,
         multires_aggregation: Union[None, str] = None,
+        n_resolutions: int = 1,
     ):
         if n_classes == 2:
             n_classes = 1
-        super(DTFD_PL, self).__init__(config, n_classes=n_classes, size=size, multires_aggregation=multires_aggregation)
+        super(DTFD_PL, self).__init__(
+            config,
+            n_classes=n_classes,
+            size=size,
+            multires_aggregation=multires_aggregation,
+            n_resolutions=n_resolutions,
+        )
         assert len(size) == 3, "size must be a tuple of size 3"
         self.model = DTFD(
             size=size,
@@ -214,12 +221,13 @@ class DTFD_PL(BaseMILModel):
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
-            if self.multires_aggregation == "bilinear":
-                assert len(h) == 2
-                h = self.bilinear(h[0], h[1])
-            elif self.multires_aggregation == "linear":
-                assert len(h) == 2
-                h = self.linear_agg_target(h[0]) + self.linear_agg_context(h[1])
+            if self.multires_aggregation == "linear":
+                h = [self.linear_agg[i](h[i]) for i in range(len(h))]
+                h = self._aggregate_multires_features(
+                    h,
+                    method="sum",
+                    is_attention=False,
+                )
             else:
                 h: torch.Tensor = aggregate_features(
                     h, method=self.multires_aggregation

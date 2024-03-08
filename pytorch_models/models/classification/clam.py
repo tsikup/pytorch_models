@@ -225,7 +225,9 @@ class CLAM_SB(nn.Module):
             and self.multires_aggregation["features"] == "concat"
         ):
             last_layer = self.classifier_size[-1]
-            self.classifier_size = [len(self.resolutions) * l for l in self.classifier_size]
+            self.classifier_size = [
+                len(self.resolutions) * l for l in self.classifier_size
+            ]
             self.classifier_size.append(last_layer)
 
         self.attention_nets = []
@@ -758,14 +760,17 @@ class CLAM_PL(BaseMILModel):
         instance_loss_weight: float = 0.3,
         subtyping: bool = False,
         multibranch=False,
-        # bilinear=None,
         multires_aggregation=None,
         linear_feature: bool = False,
         attention_depth=None,
         classifier_depth=None,
+        n_resolutions: int = 1,
     ):
         super(CLAM_PL, self).__init__(
-            config, n_classes=n_classes, multires_aggregation=multires_aggregation
+            config,
+            n_classes=n_classes,
+            multires_aggregation=multires_aggregation,
+            n_resolutions=n_resolutions,
         )
 
         self.size = size

@@ -485,26 +485,24 @@ class BaseMILModel(BaseModel):
         n_classes: int,
         multires_aggregation: Union[Dict[str, str], str, None] = None,
         size: List[int] = None,
+        n_resolutions: int = 1,
     ):
         super(BaseMILModel, self).__init__(
             config, n_classes=n_classes, in_channels=None, segmentation=False
         )
 
         self.multires_aggregation = multires_aggregation
+        self.n_resolutions = n_resolutions
 
         if (
-            self.config.model.classifier != "clam"
-            and self.multires_aggregation == "bilinear"
-        ):
-            assert size is not None
-            self.bilinear = nn.Bilinear(size[0], size[0], size[0])
-        elif (
             self.config.model.classifier != "clam"
             and self.multires_aggregation == "linear"
         ):
             assert size is not None
-            self.linear_agg_target = nn.Linear(size[0], size[0])
-            self.linear_agg_context = nn.Linear(size[0], size[0])
+            self.linear_agg = []
+            for _ in self.resolutions:
+                self.linear_agg.append(nn.Linear(size[0], size[0], bias=False))
+            self.linear_agg = nn.ModuleList(self.linear_agg)
 
     def forward(self, batch, is_predict=False):
         # Batch
@@ -535,12 +533,13 @@ class BaseMILModel(BaseModel):
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
-            if self.multires_aggregation == "bilinear":
-                assert len(h) == 2
-                h = self.bilinear(h[0], h[1])
-            elif self.multires_aggregation == "linear":
-                assert len(h) == 2
-                h = self.linear_agg_target(h[0]) + self.linear_agg_context(h[1])
+            if self.multires_aggregation == "linear":
+                h = [self.linear_agg[i](h[i]) for i in range(len(h))]
+                h = self._aggregate_multires_features(
+                    h,
+                    method="sum",
+                    is_attention=False,
+                )
             else:
                 h: torch.Tensor = aggregate_features(
                     h, method=self.multires_aggregation

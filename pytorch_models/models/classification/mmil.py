@@ -272,10 +272,17 @@ class MMIL_PL(BaseMILModel):
         ape: bool = True,
         num_layers: int = 2,
         multires_aggregation: Union[None, str] = None,
+        n_resolutions: int = 1,
     ):
         if n_classes == 1:
             n_classes = 2
-        super(MMIL_PL, self).__init__(config, n_classes=n_classes, size=size, multires_aggregation=multires_aggregation)
+        super(MMIL_PL, self).__init__(
+            config,
+            n_classes=n_classes,
+            size=size,
+            multires_aggregation=multires_aggregation,
+            n_resolutions=n_resolutions,
+        )
         assert len(size) == 2, "size must be a tuple of size 2"
 
         self.size = size
@@ -323,12 +330,13 @@ class MMIL_PL(BaseMILModel):
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
-            if self.multires_aggregation == "bilinear":
-                assert len(h) == 2
-                h = self.bilinear(h[0], h[1])
-            elif self.multires_aggregation == "linear":
-                assert len(h) == 2
-                h = self.linear_agg_target(h[0]) + self.linear_agg_context(h[1])
+            if self.multires_aggregation == "linear":
+                h = [self.linear_agg[i](h[i]) for i in range(len(h))]
+                h = self._aggregate_multires_features(
+                    h,
+                    method="sum",
+                    is_attention=False,
+                )
             else:
                 h: torch.Tensor = aggregate_features(
                     h, method=self.multires_aggregation
