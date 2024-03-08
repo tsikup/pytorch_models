@@ -223,11 +223,7 @@ class DTFD_PL(BaseMILModel):
             ]
             if self.multires_aggregation == "linear":
                 h = [self.linear_agg[i](h[i]) for i in range(len(h))]
-                h = self._aggregate_multires_features(
-                    h,
-                    method="sum",
-                    is_attention=False,
-                )
+                h = aggregate_features(h, method="sum")
             else:
                 h: torch.Tensor = aggregate_features(
                     h, method=self.multires_aggregation

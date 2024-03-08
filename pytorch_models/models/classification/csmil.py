@@ -149,11 +149,7 @@ class CSMIL_PL(BaseMILModel):
                 h = torch.stack(h, dim=-1)
             elif self.multires_aggregation == "linear":
                 h = [self.linear_agg[i](h[i]) for i in range(len(h))]
-                h = self._aggregate_multires_features(
-                    h,
-                    method="sum",
-                    is_attention=False,
-                )
+                h = aggregate_features(h, method="sum")
                 h = h.unsqueeze(dim=-1)
             else:
                 h: torch.Tensor = aggregate_features(
