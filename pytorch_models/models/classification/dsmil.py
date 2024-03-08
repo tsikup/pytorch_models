@@ -161,10 +161,17 @@ class DSMIL_PL(BaseMILModel):
         nonlinear=True,
         passing_v=False,
         multires_aggregation: Union[None, str] = None,
+        n_resolutions: int = 1,
     ):
         if n_classes == 2:
             n_classes = 1
-        super(DSMIL_PL, self).__init__(config, n_classes=n_classes, size=size, multires_aggregation=multires_aggregation)
+        super(DSMIL_PL, self).__init__(
+            config,
+            n_classes=n_classes,
+            size=size,
+            multires_aggregation=multires_aggregation,
+            n_resolutions=n_resolutions,
+        )
         assert len(size) >= 2, "size must be a tuple with 2 or more elements"
         self.model = DSMIL(
             size=size,

@@ -71,7 +71,7 @@ class TransMIL(nn.Module):
         self, h: torch.Tensor, return_features=False
     ):  # list of [B, n, 1024] if size[0] == 1024
         device = h.device
-        
+
         if len(h.shape) == 2:
             h = h.unsqueeze(0)
 
@@ -116,8 +116,15 @@ class TransMIL_PL(BaseMILModel):
         n_classes,
         size=(1024, 512),
         multires_aggregation=None,
+        n_resolutions: int = 1,
     ):
         if n_classes == 1:
             n_classes = 2
-        super(TransMIL_PL, self).__init__(config, n_classes=n_classes, size=size, multires_aggregation=multires_aggregation)
+        super(TransMIL_PL, self).__init__(
+            config,
+            n_classes=n_classes,
+            size=size,
+            multires_aggregation=multires_aggregation,
+            n_resolutions=n_resolutions,
+        )
         self.model = TransMIL(n_classes=n_classes, size=size)
