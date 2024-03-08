@@ -61,6 +61,7 @@ class CLAM_PL_Surv(BaseMILSurvModel):
                 multires_aggregation=self.multires_aggregation,
                 attention_depth=self.attention_depth,
                 classifier_depth=self.classifier_depth,
+                n_resolutions=n_resolutions,
             )
         else:
             raise NotImplementedError
