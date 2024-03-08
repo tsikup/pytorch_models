@@ -24,6 +24,7 @@ class CLAM_PL_Surv(BaseMILSurvModel):
         linear_feature: bool = False,
         attention_depth=None,
         classifier_depth=None,
+        n_resolutions: int = 1,
     ):
         super(CLAM_PL_Surv, self).__init__(
             config,
@@ -31,6 +32,7 @@ class CLAM_PL_Surv(BaseMILSurvModel):
             loss_type=loss_type,
             size=size,
             multires_aggregation=multires_aggregation,
+            n_resolutions=n_resolutions,
         )
 
         self.size = size

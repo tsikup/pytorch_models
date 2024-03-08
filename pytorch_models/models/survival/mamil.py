@@ -15,6 +15,7 @@ class MAMIL_PL_Surv(BaseMILSurvModel):
         size: Union[List[int], Tuple[int, int]] = None,
         dropout: bool = True,
         multires_aggregation: Union[None, str] = None,
+        n_resolutions: int = 1,
     ):
         super(MAMIL_PL_Surv, self).__init__(
             config,
@@ -22,6 +23,7 @@ class MAMIL_PL_Surv(BaseMILSurvModel):
             loss_type=loss_type,
             size=size,
             multires_aggregation=multires_aggregation,
+            n_resolutions=n_resolutions,
         )
         assert (
             len(size) >= 2

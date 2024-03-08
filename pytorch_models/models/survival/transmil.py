@@ -14,6 +14,7 @@ class TransMIL_PL_Surv(BaseMILSurvModel):
         loss_type="cox",
         size=(1024, 512),
         multires_aggregation=None,
+        n_resolutions: int = 1,
     ):
         self.multires_aggregation = multires_aggregation
         super(TransMIL_PL_Surv, self).__init__(
@@ -22,6 +23,7 @@ class TransMIL_PL_Surv(BaseMILSurvModel):
             loss_type=loss_type,
             size=size,
             multires_aggregation=multires_aggregation,
+            n_resolutions=n_resolutions,
         )
 
         assert (

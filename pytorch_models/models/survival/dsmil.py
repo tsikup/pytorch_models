@@ -17,6 +17,7 @@ class DSMIL_PL_Surv(BaseMILSurvModel):
         nonlinear=True,
         passing_v=False,
         multires_aggregation: Union[None, str] = None,
+        n_resolutions: int = 1,
     ):
         self.multires_aggregation = multires_aggregation
         super(DSMIL_PL_Surv, self).__init__(
@@ -25,6 +26,7 @@ class DSMIL_PL_Surv(BaseMILSurvModel):
             loss_type=loss_type,
             size=size,
             multires_aggregation=multires_aggregation,
+            n_resolutions=n_resolutions,
         )
 
         assert len(size) >= 2, "size must be a tuple with 2 or more elements"

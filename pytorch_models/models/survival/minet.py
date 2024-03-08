@@ -23,6 +23,7 @@ class MINet_PL_Surv(BaseMILSurvModel):
         dropout: bool = True,
         pooling_mode="max",
         multires_aggregation: Union[None, str] = None,
+        n_resolutions: int = 1,
     ):
         self.multires_aggregation = multires_aggregation
         super(MINet_PL_Surv, self).__init__(
@@ -31,6 +32,7 @@ class MINet_PL_Surv(BaseMILSurvModel):
             loss_type=loss_type,
             size=size,
             multires_aggregation=multires_aggregation,
+            n_resolutions=n_resolutions,
         )
 
         assert (

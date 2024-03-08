@@ -20,6 +20,7 @@ class MMIL_PL_Surv(BaseMILSurvModel):
         ape: bool = True,
         num_layers: int = 2,
         multires_aggregation: Union[None, str] = None,
+        n_resolutions: int = 1,
     ):
         self.multires_aggregation = multires_aggregation
         super(MMIL_PL_Surv, self).__init__(
@@ -28,6 +29,7 @@ class MMIL_PL_Surv(BaseMILSurvModel):
             loss_type=loss_type,
             size=size,
             multires_aggregation=multires_aggregation,
+            n_resolutions=n_resolutions,
         )
 
         assert len(size) == 2, "size must be a tuple of size 2"
@@ -87,12 +89,13 @@ class MMIL_PL_Surv(BaseMILSurvModel):
         logits = []
         for idx, features in enumerate(features_batch):
             h: List[torch.Tensor] = [features[key] for key in features]
-            if self.multires_aggregation == "bilinear":
-                assert len(h) == 2
-                h = self.bilinear(h[0], h[1])
-            elif self.multires_aggregation == "linear":
-                assert len(h) == 2
-                h = self.linear_agg_target(h[0]) + self.linear_agg_context(h[1])
+            if self.multires_aggregation == "linear":
+                h = [self.linear_agg[i](h[i]) for i in range(len(h))]
+                h = self._aggregate_multires_features(
+                    h,
+                    method="sum",
+                    is_attention=False,
+                )
             else:
                 h: torch.Tensor = aggregate_features(
                     h, method=self.multires_aggregation
@@ -100,7 +103,9 @@ class MMIL_PL_Surv(BaseMILSurvModel):
             if len(h.shape) == 2:
                 h = h.unsqueeze(dim=0)
             logits.append(
-                self.model.forward(h, coords_batch[idx] if coords_batch else None).squeeze(dim=1)
+                self.model.forward(
+                    h, coords_batch[idx] if coords_batch else None
+                ).squeeze(dim=1)
             )
         return torch.stack(logits)
 

@@ -16,6 +16,7 @@ class CSMIL_PL_Surv(BaseMILSurvModel):
         size: int = 1024,
         cluster_num: int = 1,
         multires_aggregation: Union[None, str] = None,
+        n_resolutions: int = 1,
     ):
         super(CSMIL_PL_Surv, self).__init__(
             config,
@@ -23,6 +24,7 @@ class CSMIL_PL_Surv(BaseMILSurvModel):
             loss_type=loss_type,
             size=[size],
             multires_aggregation=multires_aggregation,
+            n_resolutions=n_resolutions,
         )
 
         assert (
@@ -41,14 +43,13 @@ class CSMIL_PL_Surv(BaseMILSurvModel):
             h = [features[key] for key in features]
             if self.multires_aggregation == "concat":
                 h = torch.stack(h, dim=-1)
-            elif self.multires_aggregation == "bilinear":
-                assert len(h) == 2
-                h = self.bilinear(h[0], h[1])
-                h = h.unsqueeze(dim=-1)
             elif self.multires_aggregation == "linear":
-                assert len(h) == 2
-                h = self.linear_agg_target(h[0]) + self.linear_agg_context(h[1])
-                h = h.unsqueeze(dim=-1)
+                h = [self.linear_agg[i](h[i]) for i in range(len(h))]
+                h = self._aggregate_multires_features(
+                    h,
+                    method="sum",
+                    is_attention=False,
+                )
             else:
                 h: torch.Tensor = aggregate_features(
                     h, method=self.multires_aggregation
