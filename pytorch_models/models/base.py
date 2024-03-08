@@ -500,7 +500,7 @@ class BaseMILModel(BaseModel):
         ):
             assert size is not None
             self.linear_agg = []
-            for _ in self.resolutions:
+            for _ in range(self.n_resolutions):
                 self.linear_agg.append(nn.Linear(size[0], size[0], bias=False))
             self.linear_agg = nn.ModuleList(self.linear_agg)
 
@@ -774,7 +774,7 @@ class BaseMILSurvModel(BaseSurvModel):
         ):
             assert size is not None
             self.linear_agg = []
-            for _ in self.resolutions:
+            for _ in range(self.n_resolutions):
                 self.linear_agg.append(nn.Linear(size[0], size[0], bias=False))
             self.linear_agg = nn.ModuleList(self.linear_agg)
 
