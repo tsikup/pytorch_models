@@ -1,3 +1,7 @@
+"""
+https://github.com/owkin/HistoSSLscaling/tree/main
+"""
+
 import torch
 from transformers import ViTModel
 
