@@ -2,9 +2,9 @@ import torch
 from transformers import ViTModel
 
 
-class PhiKonModel(torch.nn.Module):
+class PhikonModel(torch.nn.Module):
     def __init__(self):
-        super(PhiKonModel, self).__init__()
+        super(PhikonModel, self).__init__()
         self.model = ViTModel.from_pretrained("owkin/phikon", add_pooling_layer=False)
 
     def forward(self, x):
@@ -14,4 +14,4 @@ class PhiKonModel(torch.nn.Module):
 
 
 def phikon():
-    return PhiKonModel()
+    return PhikonModel()
