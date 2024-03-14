@@ -10,6 +10,7 @@ from lightning.pytorch.core.optimizer import LightningOptimizer
 from torch import nn
 
 from pytorch_models.losses.losses import get_loss
+from pytorch_models.models.multimodal.two_modalities import IntegrateTwoModalities
 from pytorch_models.optim.lookahead import Lookahead
 from pytorch_models.optim.utils import get_warmup_factor
 from pytorch_models.utils.metrics.metrics import get_metrics
@@ -584,6 +585,48 @@ class BaseMILModel(BaseModel):
         return output["preds"], batch["labels"], batch["slide_name"]
 
 
+class BaseClinincalMultimodalMILModel(BaseMILModel):
+    def __init__(
+        self,
+        config: DotMap,
+        n_classes: int,
+        multires_aggregation: Union[Dict[str, str], str, None] = None,
+        multimodal_aggregation: str = "concat",
+        size: List[int] = None,
+        size_clinical: List[int] = None,
+        n_resolutions: int = 1,
+    ):
+        super(BaseClinincalMultimodalMILModel, self).__init__(
+            config=config,
+            n_classes=n_classes,
+            multires_aggregation=multires_aggregation,
+            size=size,
+            n_resolutions=n_resolutions,
+        )
+        self.multimodal_aggregation = multimodal_aggregation
+        self.size_clinical = size_clinical
+
+    def _forward(self, features_batch):
+        logits = []
+        for singlePatientFeatures in features_batch:
+            clinical = singlePatientFeatures.pop("clinical", None)
+            h: List[torch.Tensor] = [
+                singlePatientFeatures[key] for key in singlePatientFeatures
+            ]
+            if self.multires_aggregation == "linear":
+                h = [self.linear_agg[i](h[i]) for i in range(len(h))]
+                h = aggregate_features(h, method="sum")
+            else:
+                h: torch.Tensor = aggregate_features(
+                    h, method=self.multires_aggregation
+                )
+            if len(h.shape) == 3:
+                h = h.squeeze(dim=0)
+            _logits = self.model.forward(h, clinical)
+            logits.append(_logits)
+        return torch.vstack(logits)
+
+
 class BaseSurvModel(BaseModel):
     def __init__(
         self,
@@ -814,6 +857,51 @@ class BaseMILSurvModel(BaseSurvModel):
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
             _logits = self.model.forward(h)
+            logits.append(_logits)
+        return torch.vstack(logits)
+
+
+class BaseClinicalMultimodalMILSurvModel(BaseMILSurvModel):
+    def __init__(
+        self,
+        config: DotMap,
+        n_classes: int,
+        loss_type="cox",
+        size: List[int] = None,
+        size_clinical: List[int] = None,
+        multires_aggregation: Union[Dict[str, str], str, None] = None,
+        multimodal_aggregation: str = "concat",
+        n_resolutions: int = 1,
+    ):
+        super(BaseClinicalMultimodalMILSurvModel, self).__init__(
+            config=config,
+            n_classes=n_classes,
+            loss_type=loss_type,
+            size=size,
+            multires_aggregation=multires_aggregation,
+            n_resolutions=n_resolutions,
+        )
+
+        self.multimodal_aggregation = multimodal_aggregation
+        self.size_clinical = size_clinical
+
+    def _forward(self, features_batch):
+        logits = []
+        for singlePatientFeatures in features_batch:
+            clinical = singlePatientFeatures.pop("clinical", None)
+            h: List[torch.Tensor] = [
+                singlePatientFeatures[key] for key in singlePatientFeatures
+            ]
+            if self.multires_aggregation == "linear":
+                h = [self.linear_agg[i](h[i]) for i in range(len(h))]
+                h = aggregate_features(h, method="sum")
+            else:
+                h: torch.Tensor = aggregate_features(
+                    h, method=self.multires_aggregation
+                )
+            if len(h.shape) == 3:
+                h = h.squeeze(dim=0)
+            _logits = self.model.forward(h, clinical)
             logits.append(_logits)
         return torch.vstack(logits)
 

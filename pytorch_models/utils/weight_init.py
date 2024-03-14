@@ -1,8 +1,17 @@
+import math
 from typing import Union
 
 import lightning as L
 import torch.nn as nn
 from torch.nn import init
+
+
+def init_max_weights(module):
+    for m in module.modules():
+        if type(m) == nn.Linear:
+            stdv = 1.0 / math.sqrt(m.weight.size(1))
+            m.weight.data.normal_(0, stdv)
+            m.bias.data.zero_()
 
 
 def truncated_normal_(tensor, mean=0, std=1):

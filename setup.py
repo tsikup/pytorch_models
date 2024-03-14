@@ -1,5 +1,5 @@
 import sys
-from setuptools import setup
+from setuptools import setup, find_packages
 
 EXTRA_REQUIREMENTS = {
     "graphs": ["networkx", "dgl", "histocartography"],
@@ -8,27 +8,7 @@ EXTRA_REQUIREMENTS = {
 setup(
     name="pytorch_models",
     version="0.1.0",
-    packages=[
-        "pytorch_models",
-        "pytorch_models.post",
-        "pytorch_models.post.distances",
-        "pytorch_models.optim",
-        "pytorch_models.utils",
-        "pytorch_models.utils.metrics",
-        "pytorch_models.losses",
-        "pytorch_models.models",
-        "pytorch_models.models.mae",
-        "pytorch_models.models.graph",
-        "pytorch_models.models.segmentation",
-        "pytorch_models.models.segmentation.unet",
-        "pytorch_models.models.segmentation.deeplab",
-        "pytorch_models.models.ssl_features",
-        "pytorch_models.models.classification",
-        "pytorch_models.models.survival",
-        "pytorch_models.models.fair",
-        "pytorch_models.models.fair.lnl",
-        "pytorch_models.models.fair.group_dro",
-    ],
+    packages=find_packages(),
     url="https://github.com/tsikup/pytorch_models",
     license="MIT",
     author="Nikos Tsiknakis",
