@@ -59,8 +59,8 @@ def aggregate_features(
         # h = torch.kron(*features)
         h = kronecker_product_einsum_batched(*features)
     else:
-        warnings.warn(f"Method {method} not recognized. Returning both.")
-        h = features
+        warnings.warn(f"Method {method} not recognized. Returning first.")
+        h = features[0]
     return h
 
 
