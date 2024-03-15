@@ -43,9 +43,8 @@ class CSMIL_PL_Surv(BaseMILSurvModel):
             h = [features[key] for key in features]
             if self.multires_aggregation == "concat":
                 h = torch.stack(h, dim=-1)
-            elif self.multires_aggregation == "linear":
-                h = [self.linear_agg[i](h[i]) for i in range(len(h))]
-                h = aggregate_features(h, method="sum")
+            elif self.multires_aggregation in ["linear", "linear_2"]:
+                h = self.linear_agg(h)
                 h = h.unsqueeze(dim=-1)
             else:
                 h: torch.Tensor = aggregate_features(

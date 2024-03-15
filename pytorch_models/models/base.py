@@ -15,7 +15,11 @@ from pytorch_models.optim.lookahead import Lookahead
 from pytorch_models.optim.utils import get_warmup_factor
 from pytorch_models.utils.metrics.metrics import get_metrics
 from pytorch_models.utils.survival import HybridDeepHitLoss, MyDeepHitLoss, coxloss
-from pytorch_models.utils.tensor import aggregate_features
+from pytorch_models.utils.tensor import (
+    aggregate_features,
+    LinearWeightedTransformationSum,
+    LinearWeightedSum,
+)
 from ranger21 import Ranger21
 from timm.optim import AdaBelief, AdamP
 from torch.optim import (
@@ -495,15 +499,15 @@ class BaseMILModel(BaseModel):
         self.multires_aggregation = multires_aggregation
         self.n_resolutions = n_resolutions
 
-        if (
-            self.config.model.classifier != "clam"
-            and self.multires_aggregation == "linear"
-        ):
-            assert size is not None
-            self.linear_agg = []
-            for _ in range(self.n_resolutions):
-                self.linear_agg.append(nn.Linear(size[0], size[0], bias=False))
-            self.linear_agg = nn.ModuleList(self.linear_agg)
+        if self.config.model.classifier != "clam":
+            if self.multires_aggregation == "linear":
+                assert size is not None
+                self.linear_agg = LinearWeightedTransformationSum(
+                    size[0], self.n_resolutions
+                )
+            elif self.multires_aggregation == "linear_2":
+                assert size is not None
+                self.linear_agg = LinearWeightedSum(size[0], self.n_resolutions)
 
     def forward(self, batch, is_predict=False):
         # Batch
@@ -534,9 +538,8 @@ class BaseMILModel(BaseModel):
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
-            if self.multires_aggregation == "linear":
-                h = [self.linear_agg[i](h[i]) for i in range(len(h))]
-                h = aggregate_features(h, method="sum")
+            if self.multires_aggregation in ["linear", "linear_2"]:
+                h = self.linear_agg(h)
             else:
                 h: torch.Tensor = aggregate_features(
                     h, method=self.multires_aggregation
@@ -613,9 +616,8 @@ class BaseClinincalMultimodalMILModel(BaseMILModel):
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
-            if self.multires_aggregation == "linear":
-                h = [self.linear_agg[i](h[i]) for i in range(len(h))]
-                h = aggregate_features(h, method="sum")
+            if self.multires_aggregation in ["linear", "linear_2"]:
+                h = self.linear_agg(h)
             else:
                 h: torch.Tensor = aggregate_features(
                     h, method=self.multires_aggregation
@@ -807,15 +809,15 @@ class BaseMILSurvModel(BaseSurvModel):
         self.multires_aggregation = multires_aggregation
         self.n_resolutions = n_resolutions
 
-        if (
-            self.config.model.classifier != "clam"
-            and self.multires_aggregation == "linear"
-        ):
-            assert size is not None
-            self.linear_agg = []
-            for _ in range(self.n_resolutions):
-                self.linear_agg.append(nn.Linear(size[0], size[0], bias=False))
-            self.linear_agg = nn.ModuleList(self.linear_agg)
+        if self.config.model.classifier != "clam":
+            if self.multires_aggregation == "linear":
+                assert size is not None
+                self.linear_agg = LinearWeightedTransformationSum(
+                    size[0], self.n_resolutions
+                )
+            elif self.multires_aggregation == "linear_2":
+                assert size is not None
+                self.linear_agg = LinearWeightedSum(size[0], self.n_resolutions)
 
     def forward(self, batch, is_predict=False):
         # Batch
@@ -847,9 +849,8 @@ class BaseMILSurvModel(BaseSurvModel):
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
-            if self.multires_aggregation == "linear":
-                h = [self.linear_agg[i](h[i]) for i in range(len(h))]
-                h = aggregate_features(h, method="sum")
+            if self.multires_aggregation in ["linear", "linear_2"]:
+                h = self.linear_agg(h)
             else:
                 h: torch.Tensor = aggregate_features(
                     h, method=self.multires_aggregation
@@ -892,9 +893,8 @@ class BaseClinicalMultimodalMILSurvModel(BaseMILSurvModel):
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
-            if self.multires_aggregation == "linear":
-                h = [self.linear_agg[i](h[i]) for i in range(len(h))]
-                h = aggregate_features(h, method="sum")
+            if self.multires_aggregation in ["linear", "linear_2"]:
+                h = self.linear_agg(h)
             else:
                 h: torch.Tensor = aggregate_features(
                     h, method=self.multires_aggregation

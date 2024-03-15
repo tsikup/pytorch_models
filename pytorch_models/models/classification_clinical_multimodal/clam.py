@@ -12,7 +12,11 @@ from torch import Tensor
 
 from pytorch_models.models.base import BaseClinincalMultimodalMILModel
 from pytorch_models.models.multimodal.two_modalities import IntegrateTwoModalities
-from pytorch_models.utils.tensor import aggregate_features
+from pytorch_models.utils.tensor import (
+    aggregate_features,
+    LinearWeightedTransformationSum,
+    LinearWeightedSum,
+)
 from pytorch_models.models.classification.clam import (
     Attn_Net,
     Attn_Net_Gated,
@@ -144,16 +148,20 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
             __size = self.classifier_size[0]
         else:
             __size = size[0]
+
         if self.use_multires and self.multires_aggregation["features"] == "linear":
-            self.linear_agg = []
-            for _ in range(self.n_resolutions):
-                self.linear_agg.append(nn.Linear(__size, __size, bias=False))
-            self.linear_agg = nn.ModuleList(self.linear_agg)
+            self.linear_agg = LinearWeightedTransformationSum(
+                __size, self.n_resolutions
+            )
+        elif self.use_multires and self.multires_aggregation["features"] == "linear_2":
+            self.linear_agg = LinearWeightedSum(__size, self.n_resolutions)
+
         if self.use_multires and self.multires_aggregation["attention"] == "linear":
-            self.linear_agg_attention = []
-            for _ in range(self.n_resolutions):
-                self.linear_agg_attention.append(nn.Linear(__size, __size, bias=False))
-            self.linear_agg_attention = nn.ModuleList(self.linear_agg_attention)
+            self.linear_agg_attention = LinearWeightedTransformationSum(
+                __size, self.n_resolutions
+            )
+        elif self.use_multires and self.multires_aggregation["attention"] == "linear_2":
+            self.linear_agg_attention = LinearWeightedSum(__size, self.n_resolutions)
 
         if (
             self.use_multires
@@ -350,13 +358,8 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
                         method=self.multires_aggregation["features"],
                         is_attention=False,
                     )
-                elif self.multires_aggregation["features"] == "linear":
-                    h = [self.linear_agg[i](features[i]) for i in range(len(features))]
-                    h = self._aggregate_multires_features(
-                        h,
-                        method="sum",
-                        is_attention=False,
-                    )
+                elif self.multires_aggregation["features"] in ["linear", "linear_2"]:
+                    h = self.linear_agg(features)
                 A, h = self.attention_nets[0](h)  # NxK
                 A = torch.transpose(A, 1, 0)  # KxN
             else:
@@ -375,26 +378,22 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
                             method=self.multires_aggregation["attention"],
                             is_attention=True,
                         )
-                    elif self.multires_aggregation["attention"] == "linear":
-                        A = [self.linear_agg_attention[i](A[i]) for i in range(len(A))]
-                        A = self._aggregate_multires_features(
-                            A,
-                            method="sum",
-                            is_attention=True,
-                        )
+                    elif self.multires_aggregation["attention"] in [
+                        "linear",
+                        "linear_2",
+                    ]:
+                        A = self.linear_agg_attention(A)
                     if self.multires_aggregation["features"] != "linear":
                         h = self._aggregate_multires_features(
                             h,
                             method=self.multires_aggregation["features"],
                             is_attention=False,
                         )
-                    elif self.multires_aggregation["features"] == "linear":
-                        h = [self.linear_agg[i](h[i]) for i in range(len(h))]
-                        h = self._aggregate_multires_features(
-                            h,
-                            method="sum",
-                            is_attention=False,
-                        )
+                    elif self.multires_aggregation["features"] in [
+                        "linear",
+                        "linear_2",
+                    ]:
+                        h = self.linear_agg(h)
         else:
             assert (
                 len(features) == 1
@@ -458,13 +457,8 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
                     method=self.multires_aggregation["features"],
                     is_attention=False,
                 )
-            elif self.multires_aggregation["features"] == "linear":
-                M = [self.linear_agg[i](M[i]) for i in range(len(M))]
-                M = self._aggregate_multires_features(
-                    M,
-                    method="sum",
-                    is_attention=False,
-                )
+            elif self.multires_aggregation["features"] in ["linear", "linear_2"]:
+                M = self.linear_agg(M)
 
             if self.multimodal_aggregation == "concat":
                 M = torch.cat([M, clinical.unsqueeze(dim=0)], dim=1)

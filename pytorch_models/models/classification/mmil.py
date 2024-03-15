@@ -330,9 +330,8 @@ class MMIL_PL(BaseMILModel):
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
-            if self.multires_aggregation == "linear":
-                h = [self.linear_agg[i](h[i]) for i in range(len(h))]
-                h = aggregate_features(h, method="sum")
+            if self.multires_aggregation in ["linear", "linear_2"]:
+                h = self.linear_agg(h)
             else:
                 h: torch.Tensor = aggregate_features(
                     h, method=self.multires_aggregation

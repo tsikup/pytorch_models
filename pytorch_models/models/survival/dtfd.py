@@ -84,9 +84,8 @@ class DTFD_PL_Surv(BaseMILSurvModel):
         sub_logits = []
         for features in features_batch:
             h: List[torch.Tensor] = [features[key] for key in features]
-            if self.multires_aggregation == "linear":
-                h = [self.linear_agg[i](h[i]) for i in range(len(h))]
-                h = aggregate_features(h, method="sum")
+            if self.multires_aggregation in ["linear", "linear_2"]:
+                h = self.linear_agg(h)
             else:
                 h: torch.Tensor = aggregate_features(
                     h, method=self.multires_aggregation
