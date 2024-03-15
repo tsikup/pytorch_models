@@ -1,27 +1,26 @@
 """
 Data Efficient and Weakly Supervised Computational Pathology on Whole Slide Images. Nature Biomedical Engineering
 """
-from typing import Union, List
+from typing import List, Union
 
-import torch
 import numpy as np
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from topk.svm import SmoothTop1SVM
-from torch import Tensor
-
 from pytorch_models.models.base import BaseClinincalMultimodalMILModel
-from pytorch_models.models.multimodal.two_modalities import IntegrateTwoModalities
-from pytorch_models.utils.tensor import (
-    aggregate_features,
-    LinearWeightedTransformationSum,
-    LinearWeightedSum,
-)
 from pytorch_models.models.classification.clam import (
     Attn_Net,
     Attn_Net_Gated,
     initialize_weights,
 )
+from pytorch_models.models.multimodal.two_modalities import IntegrateTwoModalities
+from pytorch_models.models.utils import (
+    LinearWeightedSum,
+    LinearWeightedTransformationSum,
+)
+from pytorch_models.utils.tensor import aggregate_features
+from topk.svm import SmoothTop1SVM
+from torch import Tensor
 
 
 class CLAM_SB_ClinincalMultimodal(nn.Module):

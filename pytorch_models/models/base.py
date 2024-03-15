@@ -7,19 +7,16 @@ import torch.nn.functional as F
 from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
 from dotmap import DotMap
 from lightning.pytorch.core.optimizer import LightningOptimizer
-from torch import nn
-
 from pytorch_models.losses.losses import get_loss
-from pytorch_models.models.multimodal.two_modalities import IntegrateTwoModalities
+from pytorch_models.models.utils import (
+    LinearWeightedSum,
+    LinearWeightedTransformationSum,
+)
 from pytorch_models.optim.lookahead import Lookahead
 from pytorch_models.optim.utils import get_warmup_factor
 from pytorch_models.utils.metrics.metrics import get_metrics
 from pytorch_models.utils.survival import HybridDeepHitLoss, MyDeepHitLoss, coxloss
-from pytorch_models.utils.tensor import (
-    aggregate_features,
-    LinearWeightedTransformationSum,
-    LinearWeightedSum,
-)
+from pytorch_models.utils.tensor import aggregate_features
 from ranger21 import Ranger21
 from timm.optim import AdaBelief, AdamP
 from torch.optim import (

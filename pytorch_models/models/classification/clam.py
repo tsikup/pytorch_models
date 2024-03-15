@@ -11,11 +11,11 @@ from topk.svm import SmoothTop1SVM
 from torch import Tensor
 
 from pytorch_models.models.base import BaseMILModel
-from pytorch_models.utils.tensor import (
-    aggregate_features,
+from pytorch_models.models.utils import (
     LinearWeightedTransformationSum,
     LinearWeightedSum,
 )
+from pytorch_models.utils.tensor import aggregate_features
 
 
 def initialize_weights(module):
