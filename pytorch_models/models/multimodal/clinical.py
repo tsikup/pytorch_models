@@ -117,7 +117,7 @@ class TabularModel(nn.Module):
             x = self.emb_drop(x)
         if self.n_cont != 0:
             if self.bn_cont is not None:
-                x_cont = self.bn_cont(x_cont)
+                x_cont = self.bn_cont(x_cont.float())
             x = torch.cat([x, x_cont], 1) if self.n_emb != 0 else x_cont
         return self.layers(x)
 
