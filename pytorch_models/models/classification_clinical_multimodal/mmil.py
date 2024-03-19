@@ -161,10 +161,12 @@ class MMIL_Clinical_Multimodal_PL(BaseClinicalMultimodalMILModel):
         }
 
     def _forward(self, features_batch, coords_batch=None):
-        clinical = []
+        clinical_cat = []
+        clinical_cont = []
         imaging = []
         for idx, singlePatientFeatures in enumerate(features_batch):
-            clinical.append(singlePatientFeatures.pop("clinical", None))
+            clinical_cat.append(singlePatientFeatures.pop("clinical_cat", None))
+            clinical_cont.append(singlePatientFeatures.pop("clinical_cont", None))
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
@@ -180,7 +182,9 @@ class MMIL_Clinical_Multimodal_PL(BaseClinicalMultimodalMILModel):
                 h, coords_batch[idx] if coords_batch else None
             )
             imaging.append(_imaging)
-        clinical = self.clinical_model.forward(torch.stack(clinical, dim=0))
+        clinical = self.clinical_model(
+            torch.stack(clinical_cat, dim=0), torch.stack(clinical_cont, dim=0)
+        )
         mmfeats = self.integration_model(torch.stack(imaging, dim=0), clinical)
         logits = self.model.forward(mmfeats).squeeze(dim=1)
         return logits

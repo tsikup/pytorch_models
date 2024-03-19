@@ -105,10 +105,12 @@ class MMIL_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
         features_batch: List[Dict[str, torch.Tensor]],
         coords_batch: List[torch.Tensor] = None,
     ):
-        clinical = []
+        clinical_cat = []
+        clinical_cont = []
         imaging = []
         for idx, features in enumerate(features_batch):
-            clinical.append(features.pop("clinical", None))
+            clinical_cat.append(singlePatientFeatures.pop("clinical_cat", None))
+            clinical_cont.append(singlePatientFeatures.pop("clinical_cont", None))
             h: List[torch.Tensor] = [features[key] for key in features]
             if self.multires_aggregation in ["linear", "linear_2"]:
                 h = self.linear_agg(h)
@@ -121,7 +123,9 @@ class MMIL_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
             _imaging = self.model.forward_imaging(
                 h, coords_batch[idx] if coords_batch else None
             )
-        clinical = self.clinical_model.forward(torch.stack(clinical, dim=0))
+        clinical = self.clinical_model(
+            torch.stack(clinical_cat, dim=0), torch.stack(clinical_cont, dim=0)
+        )
         mmfeats = self.integration_model(torch.stack(imaging, dim=0), clinical)
         logits = self.model.forward(mmfeats).squeeze(dim=1)
         return logits

@@ -656,11 +656,13 @@ class BaseClinicalMultimodalMILModel(BaseMILModel):
             )
 
     def _forward(self, features_batch):
-        clinical = []
+        clinical_cat = []
+        clinical_cont = []
         imaging = []
 
         for singlePatientFeatures in features_batch:
-            clinical.append(singlePatientFeatures.pop("clinical", None))
+            clinical_cat.append(singlePatientFeatures.pop("clinical_cat", None))
+            clinical_cont.append(singlePatientFeatures.pop("clinical_cont", None))
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
@@ -673,7 +675,9 @@ class BaseClinicalMultimodalMILModel(BaseMILModel):
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
             imaging.append(self.model.forward_imaging(h))
-        clinical = self.clinical_model.forward(torch.stack(clinical, dim=0))
+        clinical = self.clinical_model(
+            torch.stack(clinical_cat, dim=0), torch.stack(clinical_cont, dim=0)
+        )
         mmfeats = self.integration_model(torch.stack(imaging, dim=0), clinical)
         logits = self.model.forward(mmfeats)
         return logits
@@ -970,10 +974,12 @@ class BaseClinicalMultimodalMILSurvModel(BaseMILSurvModel):
         )
 
     def _forward(self, features_batch):
-        clinical = []
+        clinical_cat = []
+        clinical_cont = []
         imaging = []
         for singlePatientFeatures in features_batch:
-            clinical.append(singlePatientFeatures.pop("clinical", None))
+            clinical_cat.append(singlePatientFeatures.pop("clinical_cat", None))
+            clinical_cont.append(singlePatientFeatures.pop("clinical_cont", None))
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
@@ -986,7 +992,9 @@ class BaseClinicalMultimodalMILSurvModel(BaseMILSurvModel):
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
             imaging.append(self.model.forward_imaging(h))
-        clinical = self.clinical_model.forward(torch.stack(clinical, dim=0))
+        clinical = self.clinical_model(
+            torch.stack(clinical_cat, dim=0), torch.stack(clinical_cont, dim=0)
+        )
         mmfeats = self.integration_model(torch.stack(imaging, dim=0), clinical)
         logits = self.model.forward(mmfeats)
         return logits
