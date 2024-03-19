@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List
 
 import torch
 from pytorch_models.models.base import BaseClinicalMultimodalMILSurvModel
@@ -12,9 +12,14 @@ class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
         self,
         config,
         n_classes,
+        size: List[int],
+        size_cat: int,
+        size_cont: int,
+        clinical_layers: List[int],
+        multimodal_odim: int,
+        embed_size: list = None,
+        batch_norm: bool = True,
         loss_type="cox",
-        size=None,
-        size_clinical=None,
         gate: bool = True,
         dropout=False,
         k_sample: int = 8,
@@ -35,6 +40,13 @@ class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
             n_classes=n_classes,
             loss_type=loss_type,
             size=size,
+            size_cat=size_cat,
+            size_cont=size_cont,
+            clinical_layers=clinical_layers,
+            multimodal_odim=multimodal_odim,
+            embed_size=embed_size,
+            batch_norm=batch_norm,
+            dropout=dropout,
             multires_aggregation=multires_aggregation,
             multimodal_aggregation=multimodal_aggregation,
             n_resolutions=n_resolutions,
@@ -52,14 +64,13 @@ class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
         self.attention_depth = attention_depth
         self.classifier_depth = classifier_depth
         self.linear_feature = linear_feature
-        self.size_clinical = size_clinical
 
         if not self.multibranch:
             self.model = CLAM_SB_ClinincalMultimodal(
                 gate=self.gate,
                 size=self.size,
-                size_clinical=self.size_clinical,
-                dropout=self.dropout,
+                multimodal_odim=multimodal_odim,
+                dropout=self.dropout and self.dropout > 0,
                 k_sample=self.k_sample,
                 n_classes=self.n_classes,
                 instance_loss_fn=instance_loss,
@@ -119,24 +130,44 @@ class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
         return_features=False,
         attention_only=False,
     ):
-        logits = []
+        A = []
+        M = []
         instance_loss = []
-        for idx, features in enumerate(features_batch):
-            clinical = features.pop("clinical", None)
-            feats = [features[f].squeeze() for f in features.keys()]
-            _logits, _, _, _, _results_dict = self.model.forward(
-                features=feats,
-                clinical=clinical,
-                label=event_batch[idx] if event_batch is not None else None,
-                instance_eval=instance_eval,
-                return_features=return_features,
-                attention_only=attention_only,
-            )
-            logits.append(_logits.squeeze()[1])
-            if instance_eval:
-                instance_loss.append(_results_dict["instance_loss"])
+        clinical_cat = []
+        clinical_cont = []
+        for idx, singlePatientFeatures in enumerate(features_batch):
+            clinical_cat.append(singlePatientFeatures.pop("clinical_cat", None))
+            clinical_cont.append(singlePatientFeatures.pop("clinical_cont", None))
 
-        if instance_eval:
-            return torch.stack(logits), torch.mean(torch.stack(instance_loss))
-        else:
-            return torch.stack(logits), None
+        clinical = self.clinical_model(
+            torch.stack(clinical_cat, dim=0), torch.stack(clinical_cont, dim=0)
+        )
+
+        for idx, features in enumerate(features_batch):
+            _clinical = clinical[idx]
+            feats = [features[f].squeeze() for f in features.keys()]
+
+            _h, _A = self.model.forward_imaging(feats)
+
+            _M, _results_dict = self.model.forward_instance_eval(
+                _h,
+                _A,
+                _clinical,
+                event_batch[idx] if event_batch is not None else None,
+                self.instance_integration_models,
+                instance_eval=instance_eval,
+            )
+
+            A.append(_A)
+            M.append(_M)
+            instance_loss.append(
+                _results_dict["instance_loss"] if instance_eval else None
+            )
+
+        M = self.integration_model(torch.cat(M, dim=0), clinical)
+        logits, preds, _ = self.model.forward(M)
+
+        return (
+            logits[:, 1],
+            torch.mean(torch.stack(instance_loss)) if instance_eval else None,
+        )

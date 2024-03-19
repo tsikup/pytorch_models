@@ -1,12 +1,12 @@
 # https://github.com/hustvl/MMIL-Transformer
 
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Dict
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from dotmap import DotMap
-from pytorch_models.models.base import BaseClinincalMultimodalMILModel
+from pytorch_models.models.base import BaseClinicalMultimodalMILModel
 from pytorch_models.models.classification.mmil import MultipleMILTransformer
 from pytorch_models.models.multimodal.two_modalities import IntegrateTwoModalities
 from pytorch_models.utils.tensor import aggregate_features
@@ -15,9 +15,9 @@ from pytorch_models.utils.tensor import aggregate_features
 class MultipleMILTransformer_Clinical_Multimodal(MultipleMILTransformer):
     def __init__(
         self,
-        in_chans: int = 1024,
-        embed_dim: int = 512,
-        size_clinical: int = None,
+        in_chans: int,
+        embed_dim: int,
+        multimodal_odim: int,
         n_classes: int = 2,
         num_msg: int = 1,
         num_subbags: int = 16,
@@ -25,8 +25,6 @@ class MultipleMILTransformer_Clinical_Multimodal(MultipleMILTransformer):
         ape: bool = True,
         num_layers: int = 2,
         max_size: int = int(5e4),
-        multimodal_aggregation: str = "concat",
-        dropout: float = 0.5,
     ):
         super(MultipleMILTransformer_Clinical_Multimodal, self).__init__(
             in_chans,
@@ -39,32 +37,13 @@ class MultipleMILTransformer_Clinical_Multimodal(MultipleMILTransformer):
             num_layers,
             max_size,
         )
-        self.size_clinical = size_clinical
-        self.multimodal_aggregation = multimodal_aggregation
 
-        self.clinical_dense = nn.Sequential(
-            nn.Linear(size_clinical, size_clinical),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-        )
-
-        self.integration_model = IntegrateTwoModalities(
-            dim1=embed_dim,
-            dim2=size_clinical,
-            odim=embed_dim,
-            method=multimodal_aggregation,
-            dropout=dropout,
-        )
-
-        if multimodal_aggregation == "concat":
-            self.fc2 = nn.Linear(embed_dim + size_clinical, n_classes)
-        elif multimodal_aggregation == "kron":
-            self.fc2 = nn.Linear(embed_dim * size_clinical, n_classes)
+        self.fc2 = nn.Linear(multimodal_odim, n_classes)
 
     def head(self, x):
         return self.fc2(x)
 
-    def forward(self, x, clinical, coords=None, mask_ratio=0, return_features=False):
+    def forward_imaging(self, x, coords=None, mask_ratio=0):
         # ---> init
         x = self.fc1(x)
         if self.ape:
@@ -94,24 +73,24 @@ class MultipleMILTransformer_Clinical_Multimodal(MultipleMILTransformer):
         msg_cls, _, _ = data
         msg_cls = msg_cls.view(1, self.embed_dim)
 
-        # ---> multimodal
-        clinical = self.clinical_dense(clinical)
-        msg_cls = self.integration_model(msg_cls, clinical)
+        return msg_cls
 
-        logits = self.head(msg_cls)
-
-        if return_features:
-            return logits, msg_cls
-        return logits
+    def forward(self, feats):
+        return self.head(feats)
 
 
-class MMIL_Clinical_Multimodal_PL(BaseClinincalMultimodalMILModel):
+class MMIL_Clinical_Multimodal_PL(BaseClinicalMultimodalMILModel):
     def __init__(
         self,
         config: DotMap,
         n_classes: int,
-        size: Union[List[int], Tuple[int, int]] = None,
-        size_clinical: int = None,
+        size: Union[List[int], Tuple[int, int]],
+        size_cat: int,
+        size_cont: int,
+        clinical_layers: List[int],
+        multimodal_odim: int,
+        embed_size: list = None,
+        batch_norm: bool = True,
         num_msg: int = 1,
         num_subbags: int = 16,
         mode: str = "random",
@@ -128,7 +107,13 @@ class MMIL_Clinical_Multimodal_PL(BaseClinincalMultimodalMILModel):
             config,
             n_classes=n_classes,
             size=size,
-            size_clinical=size_clinical,
+            size_cat=size_cat,
+            size_cont=size_cont,
+            clinical_layers=clinical_layers,
+            multimodal_odim=multimodal_odim,
+            embed_size=embed_size,
+            batch_norm=batch_norm,
+            dropout=dropout,
             multires_aggregation=multires_aggregation,
             multimodal_aggregation=multimodal_aggregation,
             n_resolutions=n_resolutions,
@@ -145,15 +130,13 @@ class MMIL_Clinical_Multimodal_PL(BaseClinincalMultimodalMILModel):
         self.model = MultipleMILTransformer_Clinical_Multimodal(
             in_chans=self.size[0],
             embed_dim=self.size[1],
-            size_clinical=size_clinical,
+            multimodal_odim=multimodal_odim,
             n_classes=self.n_classes,
             num_msg=self.num_msg,
             num_subbags=self.num_subbags,
             mode=self.grouping_mode,
             ape=self.ape,
             num_layers=self.num_layers,
-            multimodal_aggregation=multimodal_aggregation,
-            dropout=dropout,
         )
 
     def forward(self, batch, is_predict=False):
@@ -178,9 +161,10 @@ class MMIL_Clinical_Multimodal_PL(BaseClinincalMultimodalMILModel):
         }
 
     def _forward(self, features_batch, coords_batch=None):
-        logits = []
+        clinical = []
+        imaging = []
         for idx, singlePatientFeatures in enumerate(features_batch):
-            clinical = singlePatientFeatures.pop("clinical", None)
+            clinical.append(singlePatientFeatures.pop("clinical", None))
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
@@ -192,11 +176,14 @@ class MMIL_Clinical_Multimodal_PL(BaseClinincalMultimodalMILModel):
                 )
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
-            _logits = self.model.forward(
-                h, clinical, coords_batch[idx] if coords_batch else None
+            _imaging = self.model.forward_imaging(
+                h, coords_batch[idx] if coords_batch else None
             )
-            logits.append(_logits)
-        return torch.vstack(logits)
+            imaging.append(_imaging)
+        clinical = self.clinical_model.forward(torch.stack(clinical, dim=0))
+        mmfeats = self.integration_model(torch.stack(imaging, dim=0), clinical)
+        logits = self.model.forward(mmfeats).squeeze(dim=1)
+        return logits
 
     def _compute_metrics(self, preds, target, mode):
         if mode == "val":

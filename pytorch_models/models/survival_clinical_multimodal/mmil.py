@@ -14,9 +14,14 @@ class MMIL_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
         self,
         config: DotMap,
         n_classes: int,
+        size: Union[List[int], Tuple[int, int]],
+        size_cat: int,
+        size_cont: int,
+        clinical_layers: List[int],
+        multimodal_odim: int,
+        embed_size: list = None,
+        batch_norm: bool = True,
         loss_type="cox",
-        size: Union[List[int], Tuple[int, int]] = None,
-        size_clinical: int = None,
         num_msg: int = 1,
         num_subbags: int = 16,
         mode: str = "random",
@@ -33,7 +38,13 @@ class MMIL_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
             n_classes=n_classes,
             loss_type=loss_type,
             size=size,
-            size_clinical=size_clinical,
+            size_cat=size_cat,
+            size_cont=size_cont,
+            clinical_layers=clinical_layers,
+            multimodal_odim=multimodal_odim,
+            embed_size=embed_size,
+            batch_norm=batch_norm,
+            dropout=dropout,
             multires_aggregation=multires_aggregation,
             multimodal_aggregation=multimodal_aggregation,
             n_resolutions=n_resolutions,
@@ -55,15 +66,13 @@ class MMIL_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
         self.model = MultipleMILTransformer_Clinical_Multimodal(
             in_chans=self.size[0],
             embed_dim=self.size[1],
-            size_clinical=size_clinical,
+            multimodal_odim=multimodal_odim,
             n_classes=self.n_classes,
             num_msg=self.num_msg,
             num_subbags=self.num_subbags,
             mode=self.grouping_mode,
             ape=self.ape,
             num_layers=self.num_layers,
-            multimodal_aggregation=multimodal_aggregation,
-            dropout=dropout,
         )
 
     def forward(self, batch, is_predict=False):
@@ -96,9 +105,10 @@ class MMIL_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
         features_batch: List[Dict[str, torch.Tensor]],
         coords_batch: List[torch.Tensor] = None,
     ):
-        logits = []
+        clinical = []
+        imaging = []
         for idx, features in enumerate(features_batch):
-            clinical = features.pop("clinical", None)
+            clinical.append(features.pop("clinical", None))
             h: List[torch.Tensor] = [features[key] for key in features]
             if self.multires_aggregation in ["linear", "linear_2"]:
                 h = self.linear_agg(h)
@@ -108,9 +118,10 @@ class MMIL_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
                 )
             if len(h.shape) == 2:
                 h = h.unsqueeze(dim=0)
-            logits.append(
-                self.model.forward(
-                    h, clinical, coords_batch[idx] if coords_batch else None
-                ).squeeze(dim=1)
+            _imaging = self.model.forward_imaging(
+                h, coords_batch[idx] if coords_batch else None
             )
-        return torch.stack(logits)
+        clinical = self.clinical_model.forward(torch.stack(clinical, dim=0))
+        mmfeats = self.integration_model(torch.stack(imaging, dim=0), clinical)
+        logits = self.model.forward(mmfeats).squeeze(dim=1)
+        return logits

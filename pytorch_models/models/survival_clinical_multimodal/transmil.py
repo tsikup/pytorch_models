@@ -1,32 +1,45 @@
+from typing import Dict, List
+
 from pytorch_models.models.base import BaseClinicalMultimodalMILSurvModel
 from pytorch_models.models.classification_clinical_multimodal.transmil import (
     TransMIL_Clinical_Multimodal,
 )
 
 
-class TransMIL_PL_Surv(BaseClinicalMultimodalMILSurvModel):
+class TransMIL_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
     def __init__(
         self,
         config,
         n_classes,
+        size,
+        size_cat: int,
+        size_cont: int,
+        clinical_layers: List[int],
+        multimodal_odim: int,
+        embed_size: list = None,
+        batch_norm: bool = True,
         loss_type="cox",
-        size=(1024, 512),
-        size_clinical=None,
         multires_aggregation=None,
         multimodal_aggregation="concat",
         n_resolutions: int = 1,
         dropout=0.5,
     ):
         self.multires_aggregation = multires_aggregation
-        super(TransMIL_PL_Surv, self).__init__(
+        super(TransMIL_Clinical_Multimodal_PL_Surv, self).__init__(
             config,
             n_classes=n_classes,
             loss_type=loss_type,
             size=size,
+            size_cat=size_cat,
+            size_cont=size_cont,
+            clinical_layers=clinical_layers,
+            multimodal_odim=multimodal_odim,
+            embed_size=embed_size,
+            batch_norm=batch_norm,
+            dropout=dropout,
             multires_aggregation=multires_aggregation,
-            n_resolutions=n_resolutions,
             multimodal_aggregation=multimodal_aggregation,
-            size_clinical=size_clinical,
+            n_resolutions=n_resolutions,
         )
 
         assert (
@@ -36,7 +49,5 @@ class TransMIL_PL_Surv(BaseClinicalMultimodalMILSurvModel):
         self.model = TransMIL_Clinical_Multimodal(
             n_classes=n_classes,
             size=size,
-            size_clinical=size_clinical,
-            multimodal_aggregation=multimodal_aggregation,
-            dropout=dropout,
+            multimodal_odim=multimodal_odim,
         )

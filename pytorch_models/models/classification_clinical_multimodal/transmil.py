@@ -1,40 +1,25 @@
+from typing import List
+
 import numpy as np
 import torch
-from pytorch_models.models.base import BaseClinincalMultimodalMILModel
+from pytorch_models.models.base import BaseClinicalMultimodalMILModel
 from pytorch_models.models.classification.transmil import TransMIL
-from pytorch_models.models.multimodal.two_modalities import IntegrateTwoModalities
 from torch import nn
 
 
 class TransMIL_Clinical_Multimodal(TransMIL):
     def __init__(
-        self, n_classes, size, size_clinical, multimodal_aggregation, dropout=0.5
+        self,
+        n_classes,
+        size,
+        multimodal_odim,
     ):
         super(TransMIL_Clinical_Multimodal, self).__init__(n_classes, size)
-        self.size_clinical = size_clinical
-        self.multimodal_aggregation = multimodal_aggregation
 
-        self.clinical_dense = nn.Sequential(
-            nn.Linear(size_clinical, size_clinical),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-        )
+        self._fc2 = nn.Linear(multimodal_odim, self.n_classes)
 
-        self.integration_model = IntegrateTwoModalities(
-            dim1=size[-1],
-            dim2=size_clinical,
-            odim=size[-1],
-            method=multimodal_aggregation,
-            dropout=dropout,
-        )
-
-        if multimodal_aggregation == "concat":
-            self._fc2 = nn.Linear(size[1] + size_clinical, self.n_classes)
-        elif multimodal_aggregation == "kron":
-            self._fc2 = nn.Linear(size[1] * size_clinical, self.n_classes)
-
-    def forward(
-        self, h: torch.Tensor, clinical: torch.Tensor, return_features=False
+    def forward_imaging(
+        self, h: torch.Tensor
     ):  # list of [B, n, 1024] if size[0] == 1024
         device = h.device
 
@@ -68,24 +53,25 @@ class TransMIL_Clinical_Multimodal(TransMIL):
         # ---->cls_token
         h = self.norm(h)[:, 0]
 
-        # ---->multimodal
-        clinical = self.clinical_dense(clinical)
-        h = self.integration_model(h, clinical)
+        return h
 
+    def forward(self, h):
         # ---->predict
-        logits = self._fc2(h)  # [B, n_classes]
-        if return_features:
-            return logits, h
-        return logits
+        return self._fc2(h)
 
 
-class TransMIL_Clinical_Multimodal_PL(BaseClinincalMultimodalMILModel):
+class TransMIL_Clinical_Multimodal_PL(BaseClinicalMultimodalMILModel):
     def __init__(
         self,
         config,
         n_classes,
-        size=(1024, 512),
-        size_clinical=None,
+        size: List[int],
+        size_cat: int,
+        size_cont: int,
+        clinical_layers: List[int],
+        multimodal_odim: int,
+        embed_size: list = None,
+        batch_norm: bool = True,
         multires_aggregation=None,
         multimodal_aggregation="concat",
         n_resolutions: int = 1,  # not used
@@ -97,15 +83,17 @@ class TransMIL_Clinical_Multimodal_PL(BaseClinincalMultimodalMILModel):
             config,
             n_classes=n_classes,
             size=size,
-            size_clinical=size_clinical,
+            size_cat=size_cat,
+            size_cont=size_cont,
+            clinical_layers=clinical_layers,
+            multimodal_odim=multimodal_odim,
+            embed_size=embed_size,
+            batch_norm=batch_norm,
+            dropout=dropout,
             multires_aggregation=multires_aggregation,
             multimodal_aggregation=multimodal_aggregation,
             n_resolutions=n_resolutions,
         )
         self.model = TransMIL_Clinical_Multimodal(
-            n_classes=n_classes,
-            size=size,
-            size_clinical=size_clinical,
-            multimodal_aggregation=multimodal_aggregation,
-            dropout=dropout,
+            n_classes=n_classes, size=size, multimodal_odim=self.multimodal_odim
         )

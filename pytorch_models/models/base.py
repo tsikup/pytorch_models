@@ -8,6 +8,8 @@ from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
 from dotmap import DotMap
 from lightning.pytorch.core.optimizer import LightningOptimizer
 from pytorch_models.losses.losses import get_loss
+from pytorch_models.models.multimodal.clinical import ClinicalModel
+from pytorch_models.models.multimodal.two_modalities import IntegrateTwoModalities
 from pytorch_models.models.utils import (
     LinearWeightedSum,
     LinearWeightedTransformationSum,
@@ -585,18 +587,24 @@ class BaseMILModel(BaseModel):
         return output["preds"], batch["labels"], batch["slide_name"]
 
 
-class BaseClinincalMultimodalMILModel(BaseMILModel):
+class BaseClinicalMultimodalMILModel(BaseMILModel):
     def __init__(
         self,
         config: DotMap,
         n_classes: int,
+        size: List[int],
+        size_cat: int,
+        size_cont: int,
+        clinical_layers: List[int],
+        multimodal_odim: int,
+        embed_size: list = None,
+        batch_norm: bool = True,
+        dropout: float = 0.5,
         multires_aggregation: Union[Dict[str, str], str, None] = None,
         multimodal_aggregation: str = "concat",
-        size: List[int] = None,
-        size_clinical: List[int] = None,
         n_resolutions: int = 1,
     ):
-        super(BaseClinincalMultimodalMILModel, self).__init__(
+        super(BaseClinicalMultimodalMILModel, self).__init__(
             config=config,
             n_classes=n_classes,
             multires_aggregation=multires_aggregation,
@@ -604,12 +612,55 @@ class BaseClinincalMultimodalMILModel(BaseMILModel):
             n_resolutions=n_resolutions,
         )
         self.multimodal_aggregation = multimodal_aggregation
-        self.size_clinical = size_clinical
+        self.multimodal_odim = multimodal_odim
+        self.size_cat = size_cat
+        self.size_cont = size_cont
+        self.clinical_layers = clinical_layers
+        self.embed_size = embed_size
+        self.batch_norm = batch_norm
+
+        if multimodal_aggregation == "concat":
+            self.multimodal_odim = size[-1] + clinical_layers[-1]
+        elif multimodal_aggregation == "kron":
+            self.multimodal_odim = size[-1] * clinical_layers[-1]
+
+        self.clinical_model = ClinicalModel(
+            size_cat=size_cat,
+            size_cont=size_cont,
+            layers=clinical_layers,
+            embed_size=embed_size,
+            dropout=dropout,
+            batch_norm=batch_norm,
+        )
+
+        self.integration_model = IntegrateTwoModalities(
+            dim1=size[-1],
+            dim2=clinical_layers[-1],
+            odim=self.multimodal_odim,
+            method=multimodal_aggregation,
+            dropout=dropout,
+        )
+
+        if self.config.model.classifier == "clam":
+            self.instance_integration_models = torch.nn.ModuleList(
+                [
+                    IntegrateTwoModalities(
+                        dim1=size[-1],
+                        dim2=clinical_layers[-1],
+                        odim=self.multimodal_odim,
+                        method=multimodal_aggregation,
+                        dropout=dropout,
+                    )
+                    for _ in range(self.n_classes)
+                ]
+            )
 
     def _forward(self, features_batch):
-        logits = []
+        clinical = []
+        imaging = []
+
         for singlePatientFeatures in features_batch:
-            clinical = singlePatientFeatures.pop("clinical", None)
+            clinical.append(singlePatientFeatures.pop("clinical", None))
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
@@ -621,9 +672,11 @@ class BaseClinincalMultimodalMILModel(BaseMILModel):
                 )
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
-            _logits = self.model.forward(h, clinical)
-            logits.append(_logits)
-        return torch.vstack(logits)
+            imaging.append(self.model.forward_imaging(h))
+        clinical = self.clinical_model.forward(torch.stack(clinical, dim=0))
+        mmfeats = self.integration_model(torch.stack(imaging, dim=0), clinical)
+        logits = self.model.forward(mmfeats)
+        return logits
 
 
 class BaseSurvModel(BaseModel):
@@ -864,9 +917,15 @@ class BaseClinicalMultimodalMILSurvModel(BaseMILSurvModel):
         self,
         config: DotMap,
         n_classes: int,
+        size: List[int],
+        size_cat: int,
+        size_cont: int,
+        clinical_layers: List[int],
+        multimodal_odim: int,
+        embed_size: list = None,
+        batch_norm: bool = True,
+        dropout: float = 0.5,
         loss_type="cox",
-        size: List[int] = None,
-        size_clinical: List[int] = None,
         multires_aggregation: Union[Dict[str, str], str, None] = None,
         multimodal_aggregation: str = "concat",
         n_resolutions: int = 1,
@@ -881,12 +940,40 @@ class BaseClinicalMultimodalMILSurvModel(BaseMILSurvModel):
         )
 
         self.multimodal_aggregation = multimodal_aggregation
-        self.size_clinical = size_clinical
+        self.multimodal_odim = multimodal_odim
+        self.size_cat = size_cat
+        self.size_cont = size_cont
+        self.clinical_layers = clinical_layers
+        self.embed_size = embed_size
+        self.batch_norm = batch_norm
+
+        if multimodal_aggregation == "concat":
+            self.multimodal_odim = size[-1] + clinical_layers[-1]
+        elif multimodal_aggregation == "kron":
+            self.multimodal_odim = size[-1] * clinical_layers[-1]
+
+        self.clinical_model = ClinicalModel(
+            size_cat=size_cat,
+            size_cont=size_cont,
+            layers=clinical_layers,
+            embed_size=embed_size,
+            dropout=dropout,
+            batch_norm=batch_norm,
+        )
+
+        self.integration_model = IntegrateTwoModalities(
+            dim1=size[-1],
+            dim2=clinical_layers[-1],
+            odim=self.multimodal_odim,
+            method=multimodal_aggregation,
+            dropout=dropout,
+        )
 
     def _forward(self, features_batch):
-        logits = []
+        clinical = []
+        imaging = []
         for singlePatientFeatures in features_batch:
-            clinical = singlePatientFeatures.pop("clinical", None)
+            clinical.append(singlePatientFeatures.pop("clinical", None))
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
@@ -898,9 +985,11 @@ class BaseClinicalMultimodalMILSurvModel(BaseMILSurvModel):
                 )
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
-            _logits = self.model.forward(h, clinical)
-            logits.append(_logits)
-        return torch.vstack(logits)
+            imaging.append(self.model.forward_imaging(h))
+        clinical = self.clinical_model.forward(torch.stack(clinical, dim=0))
+        mmfeats = self.integration_model(torch.stack(imaging, dim=0), clinical)
+        logits = self.model.forward(mmfeats)
+        return logits
 
 
 class EnsembleInferenceModel(BaseModel):

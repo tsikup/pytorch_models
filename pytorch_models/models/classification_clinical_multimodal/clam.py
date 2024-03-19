@@ -1,13 +1,13 @@
 """
 Data Efficient and Weakly Supervised Computational Pathology on Whole Slide Images. Nature Biomedical Engineering
 """
-from typing import List, Union
+from typing import List, Union, Dict
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from pytorch_models.models.base import BaseClinincalMultimodalMILModel
+from pytorch_models.models.base import BaseClinicalMultimodalMILModel
 from pytorch_models.models.classification.clam import (
     Attn_Net,
     Attn_Net_Gated,
@@ -43,7 +43,7 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
         self,
         gate=True,
         size=None,
-        size_clinical=None,
+        multimodal_odim: int = None,
         dropout=True,
         k_sample=8,
         n_classes=2,
@@ -75,7 +75,7 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
         self.classifier_depth = classifier_depth
         self.linear_feature = linear_feature
         self.n_resolutions = n_resolutions
-        self.size_clinical = size_clinical
+        self.multimodal_odim = multimodal_odim
 
         if instance_loss_fn == "svm":
             self.instance_loss_fn = SmoothTop1SVM(n_classes=n_classes)
@@ -85,10 +85,6 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
             self.instance_loss_on_gpu = True
 
         assert self.attention_depth is not None and self.classifier_depth is not None
-
-        self.clinical_dense = nn.Sequential(
-            nn.Linear(self.size_clinical, self.size_clinical, bias=True), nn.ReLU()
-        )
 
         if self.linear_feature:
             if self.use_multires:
@@ -173,17 +169,7 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
             ]
             self.classifier_size.append(last_layer)
 
-        self.integration_model = IntegrateTwoModalities(
-            dim1=self.classifier_size[0],
-            dim2=self.size_clinical,
-            odim=self.classifier_size[0],
-            method=self.multimodal_aggregation,
-            dropout=dropout,
-        )
-        if self.multimodal_aggregation == "concat":
-            self.classifier_size[0] = self.classifier_size[0] + self.size_clinical
-        elif self.multimodal_aggregation == "kron":
-            self.classifier_size[0] = self.classifier_size[0] * self.size_clinical
+        self.classifier_size[0] = multimodal_odim
 
         self.attention_nets = []
         if self.use_multires and self.multires_aggregation["attention"] is not None:
@@ -275,25 +261,20 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
         return torch.full((length,), 0, device=device).long()
 
     # instance-level evaluation for in-the-class attention branch
-    def inst_eval(self, A, h, clinical, classifier):
+    def inst_eval(self, A, h, clinical, classifier, instance_integration_models):
         device = h.device
         if not self.instance_loss_on_gpu:
-            self.instance_loss_fn = self.instance_loss_fn.cuda(device.index)
-            self.instance_loss_on_gpu = True
+            pass
+            # self.instance_loss_fn = self.instance_loss_fn.cuda(device.index)
+            # self.instance_loss_on_gpu = True
         if len(A.shape) == 1:
             A = A.view(1, -1)
         top_p_ids = torch.topk(A, min(A.shape[1], self.k_sample))[1][-1]
         top_p = torch.index_select(h, dim=0, index=top_p_ids)
-        if self.multimodal_aggregation == "concat":
-            top_p = torch.cat([top_p, clinical.repeat(top_p.shape[0], 1)], dim=1)
-        else:
-            top_p = self.integration_model(top_p, clinical.repeat(top_p.shape[0], 1))
+        top_p = instance_integration_models(top_p, clinical.repeat(top_p.shape[0], 1))
         top_n_ids = torch.topk(-A, min(A.shape[1], self.k_sample), dim=1)[1][-1]
         top_n = torch.index_select(h, dim=0, index=top_n_ids)
-        if self.multimodal_aggregation == "concat":
-            top_n = torch.cat([top_n, clinical.repeat(top_p.shape[0], 1)], dim=1)
-        else:
-            top_n = self.integration_model(top_n, clinical.repeat(top_p.shape[0], 1))
+        top_n = instance_integration_models(top_n, clinical.repeat(top_n.shape[0], 1))
         p_targets = self.create_positive_targets(min(A.shape[1], self.k_sample), device)
         n_targets = self.create_negative_targets(min(A.shape[1], self.k_sample), device)
         all_targets = torch.cat([p_targets, n_targets], dim=0)
@@ -304,19 +285,17 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
         return instance_loss, all_preds, all_targets
 
     # instance-level evaluation for out-of-the-class attention branch
-    def inst_eval_out(self, A, h, clinical, classifier):
+    def inst_eval_out(self, A, h, clinical, classifier, instance_integration_models):
         device = h.device
         if not self.instance_loss_on_gpu:
-            self.instance_loss_fn = self.instance_loss_fn.cuda(device.index)
-            self.instance_loss_on_gpu = True
+            pass
+            # self.instance_loss_fn = self.instance_loss_fn.cuda(device.index)
+            # self.instance_loss_on_gpu = True
         if len(A.shape) == 1:
             A = A.view(1, -1)
         top_p_ids = torch.topk(A, min(A.shape[1], self.k_sample))[1][-1]
         top_p = torch.index_select(h, dim=0, index=top_p_ids)
-        if self.multimodal_aggregation == "concat":
-            top_p = torch.cat([top_p, clinical.repeat(top_p.shape[0], 1)], dim=1)
-        else:
-            top_p = self.integration_model(top_p, clinical.repeat(top_p.shape[0], 1))
+        top_p = instance_integration_models(top_p, clinical.repeat(top_p.shape[0], 1))
         p_targets = self.create_negative_targets(min(A.shape[1], self.k_sample), device)
         logits = classifier(top_p)
         p_preds = torch.topk(logits, 1, dim=1)[1].squeeze(1)
@@ -332,16 +311,10 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
         ), "Attention vectors cannot be integrated with concat method."
         return aggregate_features(features=features, method=method)
 
-    def forward(
+    def forward_imaging(
         self,
         features: List[Tensor],
-        clinical: Tensor,
-        label=None,
-        instance_eval=False,
-        return_features=False,
-        attention_only=False,
     ):
-        clinical = self.clinical_dense(clinical)
         if self.linear_feature:
             for idx, _layer in enumerate(self.dense_layers):
                 features[idx] = _layer(features[idx])
@@ -401,37 +374,58 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
             A, h = self.attention_nets[0](h)
             A = torch.transpose(A, 1, 0)  # KxN
 
+        return h, A
+
+    def forward_instance_eval(
+        self,
+        h,
+        A,
+        clinical,
+        label,
+        instance_integration_models,
+        instance_eval=False,
+    ):
+        results_dict = {}
         if self.use_multires and self.multires_aggregation["attention"] == "late":
-            if attention_only:
-                return A
-            A_raw = A
 
             for idx in range(self.n_resolutions):
                 A[idx] = F.softmax(A[idx], dim=1)  # softmax over N
 
             if instance_eval:
-                is_target = [idx == 0 for idx in range(self.n_resolutions)]
+                is_target = [
+                    [idx == 0 for idx in range(self.n_resolutions)]
+                    for _ in range(len(h))
+                ]
                 total_inst_loss = 0.0
                 all_preds = []
                 all_targets = []
                 all_context_preds = []
                 inst_labels = F.one_hot(
                     label.to(torch.int64), num_classes=self.n_classes
-                ).squeeze()  # binarize label
-                # for _tmp in ([h, A, True], [h_context, A_context, False]):
+                ).view(
+                    -1, len(self.instance_classifiers)
+                )  # binarize label
                 for _tmp in zip(h, A, is_target):
                     _h, _A, is_target = _tmp
                     for i in range(len(self.instance_classifiers)):
-                        inst_label = inst_labels[i].item()
+                        inst_label = inst_labels[:, i].item()
                         classifier = self.instance_classifiers[i]
                         if inst_label == 1:  # in-the-class:
                             instance_loss, preds, targets = self.inst_eval(
-                                _A, _h, clinical, classifier
+                                _A,
+                                _h,
+                                clinical,
+                                classifier,
+                                instance_integration_models[i],
                             )
                         else:  # out-of-the-class
                             if self.subtyping:
                                 instance_loss, preds, targets = self.inst_eval_out(
-                                    A, h, clinical, classifier
+                                    A,
+                                    h,
+                                    clinical,
+                                    classifier,
+                                    instance_integration_models[i],
                                 )
                             else:
                                 continue
@@ -447,6 +441,13 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
 
                 total_inst_loss /= 2
 
+                results_dict = {
+                    "instance_loss": total_inst_loss,
+                    "inst_labels": np.array(all_targets),
+                    "inst_preds": np.array(all_preds),
+                    "inst_context_preds": np.array(all_context_preds),
+                }
+
             M = []
             for idx in range(self.n_resolutions):
                 M.append(torch.mm(A[idx], h[idx]))
@@ -459,34 +460,8 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
             elif self.multires_aggregation["features"] in ["linear", "linear_2"]:
                 M = self.linear_agg(M)
 
-            if self.multimodal_aggregation == "concat":
-                M = torch.cat([M, clinical.unsqueeze(dim=0)], dim=1)
-            else:
-                M = self.integration_model(M, clinical.unsqueeze(dim=0))
-            logits = self.classifiers(M)
-            Y_hat = torch.topk(logits, 1, dim=1)[1]
-            Y_prob = F.softmax(logits, dim=1)
-
-            if instance_eval:
-                results_dict = {
-                    "instance_loss": total_inst_loss,
-                    "inst_labels": np.array(all_targets),
-                    "inst_preds": np.array(all_preds),
-                    "inst_context_preds": np.array(all_context_preds),
-                }
-            else:
-                results_dict = {}
-            if return_features:
-                results_dict.update({"features": M})
-            else:
-                results_dict.update({"features": None})
-            return logits, Y_prob, Y_hat, A_raw, results_dict
         else:
-            if attention_only:
-                return A
-            A_raw = A
             A = F.softmax(A, dim=1)  # softmax over N
-
             if instance_eval:
                 total_inst_loss = 0.0
                 all_preds = []
@@ -499,14 +474,18 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
                     classifier = self.instance_classifiers[i]
                     if inst_label == 1:  # in-the-class:
                         instance_loss, preds, targets = self.inst_eval(
-                            A, h, clinical, classifier
+                            A, h, clinical, classifier, instance_integration_models[i]
                         )
                         all_preds.extend(preds.cpu().numpy())
                         all_targets.extend(targets.cpu().numpy())
                     else:  # out-of-the-class
                         if self.subtyping:
                             instance_loss, preds, targets = self.inst_eval_out(
-                                A, h, clinical, classifier
+                                A,
+                                h,
+                                clinical,
+                                classifier,
+                                instance_integration_models[i],
                             )
                             all_preds.extend(preds.cpu().numpy())
                             all_targets.extend(targets.cpu().numpy())
@@ -517,36 +496,39 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
                 if self.subtyping:
                     total_inst_loss /= len(self.instance_classifiers)
 
-            M = torch.mm(A, h)
-            if self.multimodal_aggregation == "concat":
-                M = torch.cat([M, clinical], dim=1)
-            else:
-                M = self.integration_model(M, clinical)
-            logits = self.classifiers(M)
-            Y_hat = torch.topk(logits, 1, dim=1)[1]
-            Y_prob = F.softmax(logits, dim=1)
-            if instance_eval:
                 results_dict = {
                     "instance_loss": total_inst_loss,
                     "inst_labels": np.array(all_targets),
                     "inst_preds": np.array(all_preds),
                 }
-            else:
-                results_dict = {}
-            if return_features:
-                results_dict.update({"features": M})
-            else:
-                results_dict.update({"features": None})
-            return logits, Y_prob, Y_hat, A_raw, results_dict
+
+            M = torch.mm(A, h)
+
+        return M, results_dict
+
+    def forward(
+        self,
+        M,
+    ):
+        logits = self.classifiers(M)
+        Y_hat = torch.topk(logits, 1, dim=1)[1]
+        Y_prob = F.softmax(logits, dim=1)
+
+        return logits, Y_prob, Y_hat
 
 
-class CLAM_ClinincalMultimodal_PL(BaseClinincalMultimodalMILModel):
+class CLAM_ClinincalMultimodal_PL(BaseClinicalMultimodalMILModel):
     def __init__(
         self,
         config,
         n_classes,
-        size=None,
-        size_clinical=None,
+        size: List[int],
+        size_cat: int,
+        size_cont: int,
+        clinical_layers: List[int],
+        multimodal_odim: int,
+        embed_size: list = None,
+        batch_norm: bool = True,
         gate: bool = True,
         dropout=False,
         k_sample: int = 8,
@@ -569,11 +551,16 @@ class CLAM_ClinincalMultimodal_PL(BaseClinincalMultimodalMILModel):
             multimodal_aggregation=multimodal_aggregation,
             n_resolutions=n_resolutions,
             size=size,
-            size_clinical=size_clinical,
+            size_cat=size_cat,
+            size_cont=size_cont,
+            clinical_layers=clinical_layers,
+            multimodal_odim=multimodal_odim,
+            embed_size=embed_size,
+            batch_norm=batch_norm,
+            dropout=dropout,
         )
 
         self.size = size
-        self.size_clinical = size_clinical
         self.dropout = dropout
         self.gate = gate
         self.k_sample = k_sample
@@ -590,8 +577,8 @@ class CLAM_ClinincalMultimodal_PL(BaseClinincalMultimodalMILModel):
             self.model = CLAM_SB_ClinincalMultimodal(
                 gate=self.gate,
                 size=self.size,
-                size_clinical=size_clinical,
-                dropout=self.dropout,
+                multimodal_odim=multimodal_odim,
+                dropout=self.dropout and self.dropout > 0,
                 k_sample=self.k_sample,
                 n_classes=self.n_classes,
                 instance_loss_fn=instance_loss,
@@ -601,7 +588,6 @@ class CLAM_ClinincalMultimodal_PL(BaseClinincalMultimodalMILModel):
                 attention_depth=self.attention_depth,
                 classifier_depth=self.classifier_depth,
                 n_resolutions=n_resolutions,
-                multimodal_aggregation=multimodal_aggregation,
             )
         else:
             raise NotImplementedError
@@ -651,12 +637,21 @@ class CLAM_ClinincalMultimodal_PL(BaseClinincalMultimodalMILModel):
         return_features=False,
         attention_only=False,
     ):
-        logits = []
-        preds = []
         A = []
+        M = []
         results_dict = []
+        clinical_cat = []
+        clinical_cont = []
         for idx, singlePatientFeatures in enumerate(features_batch):
-            clinical = singlePatientFeatures.pop("clinical", None)
+            clinical_cat.append(singlePatientFeatures.pop("clinical_cat", None))
+            clinical_cont.append(singlePatientFeatures.pop("clinical_cont", None))
+
+        clinical = self.clinical_model(
+            torch.stack(clinical_cat, dim=0), torch.stack(clinical_cont, dim=0)
+        )
+
+        for idx, singlePatientFeatures in enumerate(features_batch):
+            _clinical = clinical[idx]
             feats = [
                 singlePatientFeatures[f].squeeze() for f in singlePatientFeatures.keys()
             ]
@@ -667,49 +662,90 @@ class CLAM_ClinincalMultimodal_PL(BaseClinincalMultimodalMILModel):
             else:
                 label = None
 
-            _logits, _preds, _, _A, _results_dict = self.model.forward(
-                features=feats,
-                clinical=clinical,
-                label=label,
+            _h, _A = self.model.forward_imaging(feats)
+
+            _M, _results_dict = self.model.forward_instance_eval(
+                _h,
+                _A,
+                _clinical,
+                label,
+                self.instance_integration_models,
                 instance_eval=instance_eval,
-                return_features=return_features,
-                attention_only=attention_only,
             )
-            logits.append(_logits)
-            preds.append(_preds)
+
             A.append(_A)
+            M.append(_M)
             results_dict.append(_results_dict)
 
-        return torch.vstack(logits), torch.vstack(preds), None, A, results_dict
+        M = self.integration_model(torch.cat(M, dim=0), clinical)
+        logits, preds, _ = self.model.forward(M)
+
+        return logits, preds, None, A, results_dict
 
 
 if __name__ == "__main__":
-    features = torch.rand(10, 384)
-    features_context = torch.rand(10, 384)
-    clinical = torch.randint(low=0, high=2, size=[4]).float()
-    labels = torch.randint(0, 2, [1])
+    from dotmap import DotMap
+    from pytorch_models.models.multimodal.clinical import ClinicalModel
 
-    model = CLAM_SB_ClinincalMultimodal(
-        gate=True,
-        size=[384, 256, 128],
-        size_clinical=4,
-        dropout=True,
-        k_sample=8,
+    config = DotMap(
+        {
+            "num_classes": 1,
+            "model": {
+                "input_shape": 256,
+                "classifier": "clam",
+            },
+            "trainer": {
+                "optimizer_params": {"lr": 1e-3},
+                "batch_size": 1,
+                "loss": ["ce"],
+                "classes_loss_weights": None,
+                "multi_loss_weights": None,
+                "samples_per_class": None,
+                "sync_dist": False,
+                "l1_reg_weight": None,
+                "l2_reg_weight": None,
+            },
+            "devices": {
+                "nodes": 1,
+                "gpus": 1,
+            },
+            "metrics": {"threshold": 0.5},
+        }
+    )
+
+    features_batch = [
+        {
+            "features": torch.rand(10, 384),
+            "features_context": torch.rand(10, 384),
+            "clinical_cont": torch.rand([2]),
+            "clinical_cat": torch.randint(low=0, high=2, size=[2]).float(),
+        }
+        for _ in range(32)
+    ]
+    labels = torch.randint(0, 2, [32, 1])
+    batch = {
+        "features": features_batch,
+        "labels": labels,
+        "slide_name": [f"slide_{idx}" for idx in range(32)],
+    }
+
+    model = CLAM_ClinincalMultimodal_PL(
+        config,
         n_classes=2,
-        instance_loss_fn="svm",
-        multires_aggregation=dict(features="linear", attention="late"),
+        size=[384, 256, 128],
+        size_cont=2,
+        size_cat=2,
+        clinical_layers=[16, 32],
+        multimodal_odim=288,
+        embed_size=[(2, 4), (2, 4)],
+        batch_norm=True,
+        dropout=0.5,
+        instance_eval=True,
         attention_depth=1,
         classifier_depth=1,
-        n_resolutions=2,
+        multimodal_aggregation="concat",
+        multires_aggregation=dict(features="linear", attention=None),
     )
 
-    o = model.forward(
-        features=[features, features_context],
-        clinical=clinical,
-        label=labels,
-        instance_eval=True,
-        return_features=False,
-        attention_only=False,
-    )
-
+    o = model.forward(batch)
     print(o)
