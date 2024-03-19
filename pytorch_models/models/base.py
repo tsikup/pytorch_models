@@ -973,6 +973,20 @@ class BaseClinicalMultimodalMILSurvModel(BaseMILSurvModel):
             dropout=dropout,
         )
 
+        if self.config.model.classifier == "clam":
+            self.instance_integration_models = torch.nn.ModuleList(
+                [
+                    IntegrateTwoModalities(
+                        dim1=size[-1],
+                        dim2=clinical_layers[-1],
+                        odim=self.multimodal_odim,
+                        method=multimodal_aggregation,
+                        dropout=dropout,
+                    )
+                    for _ in range(self.n_classes)
+                ]
+            )
+
     def _forward(self, features_batch):
         clinical_cat = []
         clinical_cont = []
