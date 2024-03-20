@@ -152,6 +152,9 @@ class AccuracyCox(Metric):
             survtimes.reshape(-1),
         )
 
+        hazards = torch.Tensor(hazards) if not torch.is_tensor(hazards) else hazards
+        events = torch.Tensor(events) if not torch.is_tensor(events) else events
+
         _correct, _total = accuracy_cox(hazards, events, is_update=True)
         self.correct += _correct
         self.total += _total
