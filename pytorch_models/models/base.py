@@ -619,11 +619,6 @@ class BaseClinicalMultimodalMILModel(BaseMILModel):
         self.embed_size = embed_size
         self.batch_norm = batch_norm
 
-        if multimodal_aggregation == "concat":
-            self.multimodal_odim = size[-1] + clinical_layers[-1]
-        elif multimodal_aggregation == "kron":
-            self.multimodal_odim = size[-1] * clinical_layers[-1]
-
         self.clinical_model = ClinicalModel(
             size_cat=size_cat,
             size_cont=size_cont,
@@ -633,26 +628,18 @@ class BaseClinicalMultimodalMILModel(BaseMILModel):
             batch_norm=batch_norm,
         )
 
-        self.integration_model = IntegrateTwoModalities(
-            dim1=size[-1],
-            dim2=clinical_layers[-1],
-            odim=self.multimodal_odim,
-            method=multimodal_aggregation,
-            dropout=dropout,
-        )
+        if config.model.classifier != "clam":
+            if multimodal_aggregation == "concat":
+                self.multimodal_odim = size[-1] + clinical_layers[-1]
+            elif multimodal_aggregation == "kron":
+                self.multimodal_odim = size[-1] * clinical_layers[-1]
 
-        if self.config.model.classifier == "clam":
-            self.instance_integration_models = torch.nn.ModuleList(
-                [
-                    IntegrateTwoModalities(
-                        dim1=size[-1],
-                        dim2=clinical_layers[-1],
-                        odim=self.multimodal_odim,
-                        method=multimodal_aggregation,
-                        dropout=dropout,
-                    )
-                    for _ in range(self.n_classes)
-                ]
+            self.integration_model = IntegrateTwoModalities(
+                dim1=size[-1],
+                dim2=clinical_layers[-1],
+                odim=self.multimodal_odim,
+                method=multimodal_aggregation,
+                dropout=dropout,
             )
 
     def _forward(self, features_batch):
@@ -951,11 +938,6 @@ class BaseClinicalMultimodalMILSurvModel(BaseMILSurvModel):
         self.embed_size = embed_size
         self.batch_norm = batch_norm
 
-        if multimodal_aggregation == "concat":
-            self.multimodal_odim = size[-1] + clinical_layers[-1]
-        elif multimodal_aggregation == "kron":
-            self.multimodal_odim = size[-1] * clinical_layers[-1]
-
         self.clinical_model = ClinicalModel(
             size_cat=size_cat,
             size_cont=size_cont,
@@ -965,26 +947,18 @@ class BaseClinicalMultimodalMILSurvModel(BaseMILSurvModel):
             batch_norm=batch_norm,
         )
 
-        self.integration_model = IntegrateTwoModalities(
-            dim1=size[-1],
-            dim2=clinical_layers[-1],
-            odim=self.multimodal_odim,
-            method=multimodal_aggregation,
-            dropout=dropout,
-        )
+        if config.model.classifier != "clam":
+            if multimodal_aggregation == "concat":
+                self.multimodal_odim = size[-1] + clinical_layers[-1]
+            elif multimodal_aggregation == "kron":
+                self.multimodal_odim = size[-1] * clinical_layers[-1]
 
-        if self.config.model.classifier == "clam":
-            self.instance_integration_models = torch.nn.ModuleList(
-                [
-                    IntegrateTwoModalities(
-                        dim1=size[-1],
-                        dim2=clinical_layers[-1],
-                        odim=self.multimodal_odim,
-                        method=multimodal_aggregation,
-                        dropout=dropout,
-                    )
-                    for _ in range(self.n_classes)
-                ]
+            self.integration_model = IntegrateTwoModalities(
+                dim1=size[-1],
+                dim2=clinical_layers[-1],
+                odim=self.multimodal_odim,
+                method=multimodal_aggregation,
+                dropout=dropout,
             )
 
     def _forward(self, features_batch):

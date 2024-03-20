@@ -5,6 +5,7 @@ from pytorch_models.models.base import BaseClinicalMultimodalMILSurvModel
 from pytorch_models.models.classification_clinical_multimodal.clam import (
     CLAM_SB_ClinincalMultimodal,
 )
+from pytorch_models.models.multimodal.two_modalities import IntegrateTwoModalities
 
 
 class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
@@ -65,11 +66,20 @@ class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
         self.classifier_depth = classifier_depth
         self.linear_feature = linear_feature
 
+        if isinstance(classifier_depth, int):
+            c_size = size[classifier_depth]
+        else:
+            c_size = size[classifier_depth[0]]
+        if multimodal_aggregation == "concat":
+            self.multimodal_odim = c_size + clinical_layers[-1]
+        elif multimodal_aggregation == "kron":
+            self.multimodal_odim = c_size * clinical_layers[-1]
+
         if not self.multibranch:
             self.model = CLAM_SB_ClinincalMultimodal(
                 gate=self.gate,
                 size=self.size,
-                multimodal_odim=multimodal_odim,
+                multimodal_odim=self.multimodal_odim,
                 dropout=self.dropout and self.dropout > 0,
                 k_sample=self.k_sample,
                 n_classes=self.n_classes,
@@ -84,6 +94,27 @@ class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
             )
         else:
             raise NotImplementedError
+
+        self.integration_model = IntegrateTwoModalities(
+            dim1=size[classifier_depth],
+            dim2=clinical_layers[-1],
+            odim=self.multimodal_odim,
+            method=multimodal_aggregation,
+            dropout=dropout,
+        )
+
+        self.instance_integration_models = torch.nn.ModuleList(
+            [
+                IntegrateTwoModalities(
+                    dim1=size[classifier_depth],
+                    dim2=clinical_layers[-1],
+                    odim=self.multimodal_odim,
+                    method=multimodal_aggregation,
+                    dropout=dropout,
+                )
+                for _ in range(self.n_classes)
+            ]
+        )
 
     def forward(self, batch, is_predict=False):
         # Batch
