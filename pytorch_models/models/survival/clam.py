@@ -90,7 +90,7 @@ class CLAM_PL_Surv(BaseMILSurvModel):
         if self.loss_type != "cox_loss" or (
             len(survtime.shape) > 1 and survtime.shape[1] > 1
         ):
-            survtime = torch.argmax(survtime, dim=1).view(self.batch_size, 1)
+            survtime = torch.argmax(survtime, dim=1).view(-1, 1)
 
         # Prediction
         logits, instance_loss = self._forward(
@@ -100,7 +100,7 @@ class CLAM_PL_Surv(BaseMILSurvModel):
             return_features=False,
             attention_only=False,
         )
-        logits = logits.view(self.batch_size, -1)
+        logits = logits.view(survtime.shape[0], -1)
         logits = torch.sigmoid(logits)
 
         S, risk = None, None

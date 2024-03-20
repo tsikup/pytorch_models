@@ -53,7 +53,7 @@ class DTFD_PL_Surv(BaseMILSurvModel):
         if self.loss_type != "cox_loss" or (
             len(survtime.shape) > 1 and survtime.shape[1] > 1
         ):
-            survtime = torch.argmax(survtime, dim=1).view(self.batch_size, 1)
+            survtime = torch.argmax(survtime, dim=1).view(-1, 1)
 
         # Prediction
         logits, sub_logits = self._forward(

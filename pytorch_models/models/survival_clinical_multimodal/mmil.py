@@ -88,7 +88,7 @@ class MMIL_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
         if self.loss_type != "cox_loss" or (
             len(survtime.shape) > 1 and survtime.shape[1] > 1
         ):
-            survtime = torch.argmax(survtime, dim=1).view(self.batch_size, 1)
+            survtime = torch.argmax(survtime, dim=1).view(-1, 1)
 
         if self.grouping_mode == "coords":
             coords = batch["coords"]
