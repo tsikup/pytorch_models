@@ -20,6 +20,8 @@ class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
         multimodal_odim: int,
         embed_size: list = None,
         batch_norm: bool = True,
+        bilinear_scale_dim1: int = 1,
+        bilinear_scale_dim2: int = 1,
         loss_type="cox",
         gate: bool = True,
         dropout=False,
@@ -100,6 +102,8 @@ class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
             dim2=clinical_layers[-1],
             odim=self.multimodal_odim,
             method=multimodal_aggregation,
+            bilinear_scale_dim1=bilinear_scale_dim1,
+            bilinear_scale_dim2=bilinear_scale_dim2,
             dropout=dropout,
         )
 
@@ -110,6 +114,8 @@ class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
                     dim2=clinical_layers[-1],
                     odim=self.multimodal_odim,
                     method=multimodal_aggregation,
+                    bilinear_scale_dim1=bilinear_scale_dim1,
+                    bilinear_scale_dim2=bilinear_scale_dim2,
                     dropout=dropout,
                 )
                 for _ in range(self.n_classes)

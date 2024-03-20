@@ -599,6 +599,8 @@ class BaseClinicalMultimodalMILModel(BaseMILModel):
         multimodal_odim: int,
         embed_size: list = None,
         batch_norm: bool = True,
+        bilinear_scale_dim1: int = 1,
+        bilinear_scale_dim2: int = 1,
         dropout: float = 0.5,
         multires_aggregation: Union[Dict[str, str], str, None] = None,
         multimodal_aggregation: str = "concat",
@@ -639,6 +641,8 @@ class BaseClinicalMultimodalMILModel(BaseMILModel):
                 dim2=clinical_layers[-1],
                 odim=self.multimodal_odim,
                 method=multimodal_aggregation,
+                bilinear_scale_dim1=bilinear_scale_dim1,
+                bilinear_scale_dim2=bilinear_scale_dim2,
                 dropout=dropout,
             )
 
@@ -916,6 +920,8 @@ class BaseClinicalMultimodalMILSurvModel(BaseMILSurvModel):
         embed_size: list = None,
         batch_norm: bool = True,
         dropout: float = 0.5,
+        bilinear_scale_dim1: int = 1,
+        bilinear_scale_dim2: int = 1,
         loss_type="cox",
         multires_aggregation: Union[Dict[str, str], str, None] = None,
         multimodal_aggregation: str = "concat",
@@ -958,6 +964,8 @@ class BaseClinicalMultimodalMILSurvModel(BaseMILSurvModel):
                 dim2=clinical_layers[-1],
                 odim=self.multimodal_odim,
                 method=multimodal_aggregation,
+                bilinear_scale_dim1=bilinear_scale_dim1,
+                bilinear_scale_dim2=bilinear_scale_dim2,
                 dropout=dropout,
             )
 

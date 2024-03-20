@@ -5,7 +5,16 @@ from torch import nn
 
 
 class IntegrateTwoModalities(nn.Module):
-    def __init__(self, dim1, dim2, odim, method="concat", dropout=0.5):
+    def __init__(
+        self,
+        dim1,
+        dim2,
+        odim,
+        method="concat",
+        bilinear_scale_dim1=1,
+        bilinear_scale_dim2=1,
+        dropout=0.5,
+    ):
         super(IntegrateTwoModalities, self).__init__()
         assert method in [
             "concat",
@@ -18,7 +27,12 @@ class IntegrateTwoModalities(nn.Module):
 
         if method == "bilinear_pathomic":
             self.bilinear = BilinearFusion(
-                dim1=dim1, dim2=dim2, mmhid=odim, dropout_rate=dropout
+                dim1=dim1,
+                dim2=dim2,
+                scale_dim1=bilinear_scale_dim1,
+                scale_dim2=bilinear_scale_dim2,
+                mmhid=odim,
+                dropout_rate=dropout,
             )
         elif method == "bilinear":
             self.bilinear = nn.Bilinear(dim1, dim2, odim, bias=True)
