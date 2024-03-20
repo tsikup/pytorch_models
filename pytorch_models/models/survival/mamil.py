@@ -28,9 +28,6 @@ class MAMIL_PL_Surv(BaseMILSurvModel):
         assert (
             len(size) >= 2
         ), "size must be a tuple of (n_features, layer1_size, layer2_size, ...)"
-        assert (
-            self.n_classes == 1
-        ), "Survival model should have 1 output class (i.e. hazard)"
 
         self.multires_aggregation = multires_aggregation
         self.dropout = dropout

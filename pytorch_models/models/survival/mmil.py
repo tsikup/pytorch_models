@@ -33,9 +33,6 @@ class MMIL_PL_Surv(BaseMILSurvModel):
         )
 
         assert len(size) == 2, "size must be a tuple of size 2"
-        assert (
-            self.n_classes == 1
-        ), "Survival model should have 1 output class (i.e. hazard)"
 
         self.size = size
         self.num_msg = num_msg
@@ -64,20 +61,34 @@ class MMIL_PL_Surv(BaseMILSurvModel):
             batch["survtime"],
             None,
         )
+
+        if self.loss_type != "cox_loss" or (
+            len(survtime.shape) > 1 and survtime.shape[1] > 1
+        ):
+            survtime = torch.argmax(survtime, dim=1).view(self.batch_size, 1)
+
         if self.grouping_mode == "coords":
             coords = batch["coords"]
         # Prediction
         logits = self._forward(features, coords)
         logits = torch.sigmoid(logits)
+
+        S, risk = None, None
+        if self.n_classes > 1 and logits.shape[1] > 1:
+            S = torch.cumprod(1 - logits, dim=1)
+            risk = -torch.sum(S, dim=1).detach().cpu().numpy()
+
         # Loss (on logits)
-        loss = self.compute_loss(survtime, event, logits)
+        loss = self.compute_loss(survtime, event, logits, S)
         if self.l1_reg_weight:
             loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
 
         return {
             "event": event,
             "survtime": survtime,
-            "preds": logits,
+            "hazards": logits,
+            "risk": risk,
+            "S": S,
             "loss": loss,
             "slide_name": batch["slide_name"],
         }

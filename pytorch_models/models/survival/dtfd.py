@@ -31,7 +31,6 @@ class DTFD_PL_Surv(BaseMILSurvModel):
         )
 
         assert len(size) == 3, "size must be a tuple of size 3"
-        assert self.n_classes == 1, "n_classes must be 1 for survival model"
 
         self.multires_aggregation = multires_aggregation
 
@@ -51,6 +50,11 @@ class DTFD_PL_Surv(BaseMILSurvModel):
             batch["survtime"],
         )
 
+        if self.loss_type != "cox_loss" or (
+            len(survtime.shape) > 1 and survtime.shape[1] > 1
+        ):
+            survtime = torch.argmax(survtime, dim=1).view(self.batch_size, 1)
+
         # Prediction
         logits, sub_logits = self._forward(
             features
@@ -58,6 +62,15 @@ class DTFD_PL_Surv(BaseMILSurvModel):
 
         logits = torch.sigmoid(logits)
         sub_logits = torch.sigmoid(sub_logits)
+
+        S, risk = None, None
+        sub_S, sub_risk = None, None
+        if self.n_classes > 1 and logits.shape[1] > 1:
+            raise NotImplementedError
+            S = torch.cumprod(1 - logits, dim=2)
+            risk = -torch.sum(S, dim=2).detach().cpu().numpy()
+            sub_S = torch.cumprod(1 - sub_logits, dim=2)
+            sub_risk = -torch.sum(sub_S, dim=2).detach().cpu().numpy()
 
         sub_event = event.repeat(1, sub_logits.shape[1]).reshape(
             -1
@@ -69,15 +82,17 @@ class DTFD_PL_Surv(BaseMILSurvModel):
             -1
         )  ### batch_size x numGroup -> batch_size * numGroup x 1
 
-        loss = self.compute_loss(survtime, event, logits)
-        loss += self.compute_loss(sub_survtime, sub_event, sub_logits)
+        loss = self.compute_loss(survtime, event, logits, S)
+        loss += self.compute_loss(sub_survtime, sub_event, sub_logits, S)
         if self.l1_reg_weight:
             loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
 
         return {
             "event": event.squeeze(),
             "survtime": survtime.squeeze(),
-            "preds": logits.squeeze(),
+            "hazards": logits,
+            "risk": risk,
+            "S": S,
             "loss": loss,
             "slide_name": batch["slide_name"],
         }

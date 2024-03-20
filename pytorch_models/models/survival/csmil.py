@@ -27,10 +27,6 @@ class CSMIL_PL_Surv(BaseMILSurvModel):
             n_resolutions=n_resolutions,
         )
 
-        assert (
-            self.n_classes == 1
-        ), "Survival model should have 1 output class (i.e. hazard)"
-
         self.multires_aggregation = multires_aggregation
 
         self.model = CSMIL(

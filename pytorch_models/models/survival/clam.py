@@ -87,6 +87,11 @@ class CLAM_PL_Surv(BaseMILSurvModel):
             batch["survtime"],
         )
 
+        if self.loss_type != "cox_loss" or (
+            len(survtime.shape) > 1 and survtime.shape[1] > 1
+        ):
+            survtime = torch.argmax(survtime, dim=1).view(self.batch_size, 1)
+
         # Prediction
         logits, instance_loss = self._forward(
             features_batch=features,
@@ -95,13 +100,18 @@ class CLAM_PL_Surv(BaseMILSurvModel):
             return_features=False,
             attention_only=False,
         )
-        logits = logits.unsqueeze(1)
+        logits = logits.view(self.batch_size, -1)
         logits = torch.sigmoid(logits)
+
+        S, risk = None, None
+        if self.n_classes > 1 and logits.shape[1] > 1:
+            S = torch.cumprod(1 - logits, dim=1)
+            risk = -torch.sum(S, dim=1).detach().cpu().numpy()
 
         loss = None
         if not is_predict:
             # Loss (on logits)
-            loss = self.compute_loss(survtime, event, logits)
+            loss = self.compute_loss(survtime, event, logits, S)
             if self.l1_reg_weight:
                 loss = loss + self.l1_regularisation(self.l1_reg_weight)
             if self.instance_eval:
@@ -111,8 +121,10 @@ class CLAM_PL_Surv(BaseMILSurvModel):
 
         return {
             "event": event,
-            "preds": logits,
             "survtime": survtime,
+            "hazards": logits,
+            "risk": risk,
+            "S": S,
             "loss": loss,
             "slide_name": batch["slide_name"],
         }
@@ -137,14 +149,17 @@ class CLAM_PL_Surv(BaseMILSurvModel):
                 return_features=return_features,
                 attention_only=attention_only,
             )
-            logits.append(_logits.squeeze()[1])
+            if self.loss_type == "cox_loss":
+                logits.append(_logits.squeeze()[1])
+            else:
+                logits.append(_logits.squeeze())
             if instance_eval:
                 instance_loss.append(_results_dict["instance_loss"])
 
         if instance_eval:
-            return torch.stack(logits), torch.mean(torch.stack(instance_loss))
+            return torch.stack(logits, dim=0), torch.mean(torch.stack(instance_loss))
         else:
-            return torch.stack(logits), None
+            return torch.stack(logits, dim=0), None
 
 
 if __name__ == "__main__":
@@ -160,17 +175,18 @@ if __name__ == "__main__":
         {"features": torch.rand(100, 384), "features_context": torch.rand(100, 384)}
         for _ in range(32)
     ]
-    survtime = torch.rand(32, 1) * 100
+    survtime = torch.randint(0, 10, (32,))
+    survtime = torch.nn.functional.one_hot(survtime, 10).reshape(-1, 10).float()
     event = torch.randint(0, 2, (32, 1))
 
     config = DotMap(
         {
-            "num_classes": 1,
+            "num_classes": 10,
             "model": {"input_shape": 384},
             # "trainer.optimizer_params.lr"
             "trainer": {
                 "optimizer_params": {"lr": 1e-3},
-                "batch_size": 1,
+                "batch_size": 32,
                 "loss": ["ce"],
                 "classes_loss_weights": None,
                 "multi_loss_weights": None,
@@ -187,7 +203,7 @@ if __name__ == "__main__":
 
     model = CLAM_PL_Surv(
         config=config,
-        n_classes=2,
+        n_classes=10,
         size=[384, 256, 128],
         gate=True,
         instance_eval=True,
@@ -195,6 +211,9 @@ if __name__ == "__main__":
         multires_aggregation={"features": "mean", "attention": None},
         classifier_depth=1,
         attention_depth=1,
+        # loss_type="cox_loss",
+        # loss_type="nll_loss",
+        # loss_type="ce_loss",
     )
 
     # run model
@@ -207,7 +226,11 @@ if __name__ == "__main__":
 
     out = model.forward(batch)
     metric = CIndex()
-    metric.update(out["preds"], out["event"], out["survtime"])
+    metric.update(
+        out["risk"] if out["risk"] is not None else out["hazards"],
+        out["event"],
+        out["survtime"],
+    )
     metric = metric.compute()
     print(out)
     print(metric)

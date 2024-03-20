@@ -35,10 +35,6 @@ class MINet_PL_Surv(BaseMILSurvModel):
             n_resolutions=n_resolutions,
         )
 
-        assert (
-            self.n_classes == 1
-        ), "Survival model should have 1 output class (i.e. hazard)"
-
         self.dropout = dropout
         self.pooling_mode = pooling_mode
         self.multires_aggregation = multires_aggregation

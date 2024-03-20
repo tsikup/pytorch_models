@@ -1,6 +1,5 @@
 import torch
 from lifelines.statistics import logrank_test
-from lifelines.utils import concordance_index
 from pycox.models.loss import DeepHitSingleLoss, nll_pmf, _Loss
 from torch import Tensor, nn
 from torchmetrics import Metric
@@ -14,6 +13,11 @@ Continuous Time Survival
 #######################
 def coxloss(survtime, event, hazard_pred):
     """
+    A partial likelihood estimation (called Breslow estimation) function in Survival Analysis.
+
+    This is a pytorch implementation by Huang. See more in https://github.com/huangzhii/SALMON.
+    Note that it only supports survival data with no ties (i.e., event occurrence at same time).
+
     The loss functions requires batched input to work properly (i.e. batch size > 1)
     :param survtime:
     :param event:
@@ -90,27 +94,34 @@ def cox_log_rank(
     return pvalue_pred
 
 
-def cindex(hazards, labels, survtime_all, is_update=False):
+def cindex(hazards, events, survtimes, is_update=False):
     concord = 0.0
     total = 0.0
-    N_test = labels.shape[0]
+    N_test = events.shape[0]
     for i in range(N_test):
-        if labels[i] == 1:
+        if events[i] == 1:
             for j in range(N_test):
-                if survtime_all[j] > survtime_all[i]:
+                if survtimes[j] > survtimes[i]:
                     total += 1
                     if hazards[j] < hazards[i]:
                         concord += 1
                     elif hazards[j] == hazards[i]:
                         concord += 0.5
-
     if is_update:
         return concord, total
     return concord / total
 
 
-def cindex_lifeline(hazards, labels, survtime_all):
-    return concordance_index(survtime_all, -hazards, labels)
+def cindex_lifeline(hazards, events, survtime):
+    from lifelines.utils import concordance_index
+
+    return concordance_index(survtime, -hazards, events)
+
+
+def cindex_sksurv(hazards, events, survtime):
+    from sksurv.metrics import concordance_index_censored
+
+    return concordance_index_censored(events == 1, survtime, hazards)[0]
 
 
 #####################
@@ -238,7 +249,15 @@ class CIndex(Metric):
 
 
 def nll_loss(hazards, S, Y, c, alpha=0.4, eps=1e-7):
-    """
+    """A maximum likelihood estimation function in Survival Analysis.
+
+    As suggested in '10.1109/TPAMI.2020.2979450',
+        [*] L = (1 - alpha) * loss_l + alpha * loss_z.
+    where loss_l is the negative log-likelihood loss, loss_z is an upweighted term for instances
+    D_uncensored. In discrete model, T = 0 if t in [0, a_1), T = 1 if t in [a_1, a_2) ...
+
+    This implementation is based on https://github.com/mahmoodlab/MCAT/blob/master/utils/utils.py
+
     :param hazards: (N,K); hazards for each bin (K) in batch (N)
     :param S: (N,K); cumulative product of 1 - hazards, i.e. survival probability at each bin
     :param Y: (N,1); ground truth bin, 1,2,...,k; i.e. the bin where the event happened
@@ -248,7 +267,10 @@ def nll_loss(hazards, S, Y, c, alpha=0.4, eps=1e-7):
     :return:
     """
     batch_size = len(Y)
-    Y = Y.view(batch_size, 1)  # ground truth bin, 1,2,...,k
+    if len(Y.shape) > 1 and Y.shape[1] > 1:
+        Y = Y.argmax(dim=1).view(batch_size, 1)  # ground truth bin, 1,2,...,k
+    else:
+        Y = Y.view(batch_size, 1)  # ground truth bin, 1,2,...,k
     c = c.view(batch_size, 1).float()  # censorship status, 0 or 1
     if S is None:
         S = torch.cumprod(
@@ -274,6 +296,8 @@ def nll_loss(hazards, S, Y, c, alpha=0.4, eps=1e-7):
 
 def ce_loss(hazards, S, Y, c, alpha=0.4, eps=1e-7):
     """
+    This implementation is based on https://github.com/mahmoodlab/MCAT/blob/master/utils/utils.py
+
     :param hazards: (N,K); hazards for each bin (K) in batch (N)
     :param S: (N,K); cumulative product of 1 - hazards, i.e. survival probability at each bin
     :param Y: (N,1); ground truth bin, 1,2,...,k; i.e. the bin where the event happened
@@ -283,7 +307,10 @@ def ce_loss(hazards, S, Y, c, alpha=0.4, eps=1e-7):
     :return:
     """
     batch_size = len(Y)
-    Y = Y.view(batch_size, 1)  # ground truth bin, 1,2,...,k
+    if len(Y.shape) > 1 and Y.shape[1] > 1:
+        Y = Y.argmax(dim=1).view(batch_size, 1)  # ground truth bin, 1,2,...,k
+    else:
+        Y = Y.view(batch_size, 1)  # ground truth bin, 1,2,...,k
     c = c.view(batch_size, 1).float()  # censorship status, 0 or 1
     if S is None:
         S = torch.cumprod(
@@ -313,7 +340,7 @@ class CrossEntropySurvLoss(object):
         hazards: Tensor, shape (N,1); predicted hazards (logits)
         S: Tensor, shape (N,K); cumulative product of 1 - hazards, i.e. survival probability at each bin
         Y: Tensor, shape (N,1); ground truth bin, 1,2,...,k; i.e. the bin where the event happened
-        c: Tensor, shape (N,1); event status (0 or 1)
+        c: Tensor, shape (N,1); censor status (0 or 1)
     """
 
     def __init__(self, alpha=0.15):
@@ -333,7 +360,7 @@ class NLLSurvLoss(object):
         hazards: Tensor, shape (N,1); predicted hazards (logits)
         S: Tensor, shape (N,K); cumulative product of 1 - hazards, i.e. survival probability at each bin
         Y: Tensor, shape (N,1); ground truth bin, 1,2,...,k; i.e. the bin where the event happened
-        c: Tensor, shape (N,1); event status (0 or 1)
+        c: Tensor, shape (N,1); censor status (0 or 1)
     """
 
     def __init__(self, alpha=0.15):
@@ -349,6 +376,7 @@ class NLLSurvLoss(object):
 class CoxSurvLoss(object):
     """
     Cox loss for survival model
+
     The loss functions requires batched input to work properly (i.e. batch size > 1)
     :arg
         hazards: Tensor, shape (N,1); predicted hazards (logits)

@@ -46,10 +46,6 @@ class TransMIL_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
             n_resolutions=n_resolutions,
         )
 
-        assert (
-            self.n_classes == 1
-        ), "Survival model should have 1 output class (i.e. hazard)"
-
         self.model = TransMIL_Clinical_Multimodal(
             n_classes=n_classes,
             size=size,

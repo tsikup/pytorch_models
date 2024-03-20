@@ -130,6 +130,11 @@ class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
             batch["survtime"],
         )
 
+        if self.loss_type != "cox_loss" or (
+            len(survtime.shape) > 1 and survtime.shape[1] > 1
+        ):
+            survtime = torch.argmax(survtime, dim=1).view(self.batch_size, 1)
+
         # Prediction
         logits, instance_loss = self._forward(
             features_batch=features,
@@ -141,10 +146,15 @@ class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
         logits = logits.unsqueeze(1)
         logits = torch.sigmoid(logits)
 
+        S, risk = None, None
+        if self.n_classes > 1 and logits.shape[1] > 1:
+            S = torch.cumprod(1 - logits, dim=1)
+            risk = -torch.sum(S, dim=1).detach().cpu().numpy()
+
         loss = None
         if not is_predict:
             # Loss (on logits)
-            loss = self.compute_loss(survtime, event, logits)
+            loss = self.compute_loss(survtime, event, logits, S)
             if self.l1_reg_weight:
                 loss = loss + self.l1_regularisation(self.l1_reg_weight)
             if self.instance_eval:
@@ -154,8 +164,10 @@ class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
 
         return {
             "event": event,
-            "preds": logits,
             "survtime": survtime,
+            "hazards": logits,
+            "risk": risk,
+            "S": S,
             "loss": loss,
             "slide_name": batch["slide_name"],
         }

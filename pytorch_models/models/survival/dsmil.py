@@ -30,9 +30,6 @@ class DSMIL_PL_Surv(BaseMILSurvModel):
         )
 
         assert len(size) >= 2, "size must be a tuple with 2 or more elements"
-        assert (
-            self.n_classes == 1
-        ), "Survival model should have 1 output class (i.e. hazard)"
 
         self.model = DSMIL(
             size=size,

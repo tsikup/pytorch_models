@@ -17,7 +17,13 @@ from pytorch_models.models.utils import (
 from pytorch_models.optim.lookahead import Lookahead
 from pytorch_models.optim.utils import get_warmup_factor
 from pytorch_models.utils.metrics.metrics import get_metrics
-from pytorch_models.utils.survival import HybridDeepHitLoss, MyDeepHitLoss, coxloss
+from pytorch_models.utils.survival import (
+    HybridDeepHitLoss,
+    MyDeepHitLoss,
+    NLLSurvLoss,
+    CrossEntropySurvLoss,
+    CoxSurvLoss,
+)
 from pytorch_models.utils.tensor import aggregate_features
 from ranger21 import Ranger21
 from timm.optim import AdaBelief, AdamP
@@ -718,26 +724,30 @@ class BaseSurvModel(BaseModel):
         ).clone(prefix="test_")
 
     def _define_loss(self, loss_type, alpha=0.5, sigma=1.0):
-        if loss_type == "cox":
-            pass
+        if loss_type == "cox_loss":
+            self._coxloss = CoxSurvLoss()
+        elif loss_type == "nll_loss":
+            self._nll_loss = NLLSurvLoss()
         elif loss_type == "deephit":
-            self._deephistloss = MyDeepHitLoss(alpha, sigma)
+            raise NotImplementedError
+            # self._deephistloss = MyDeepHitLoss(alpha, sigma)
         elif loss_type == "hybrid_deephist":
-            self._dynamic_deephistloss = HybridDeepHitLoss(alpha, sigma)
+            raise NotImplementedError
+            # self._dynamic_deephistloss = HybridDeepHitLoss(alpha, sigma)
         else:
             raise NotImplementedError
 
-    def _coxloss(self, survtime, event, logits):
-        return coxloss(survtime, event, logits)
-
-    def compute_loss(self, survtime, event, logits):
-        if self.loss_type == "cox":
-            return self._coxloss(survtime, event, logits)
+    def compute_loss(self, survtime, event, hazards, S):
+        if self.loss_type == "cox_loss":
+            return self._coxloss(hazards=hazards, survtimes=survtime, events=event)
+        elif self.loss_type == "nll_loss":
+            return self._nll_loss(hazards=hazards, S=S, Y=survtime, c=1 - event)
         elif self.loss_type == "deephit":
-
-            return self._deephistloss(survtime, event, logits)
+            raise NotImplementedError
+            # return self._deephistloss(survtimes=survtime, events=event, hazards=hazards)
         elif self.loss_type == "hybrid_deephist":
-            return self._dynamic_deephistloss(survtime, event, logits)
+            raise NotImplementedError
+            # return self._dynamic_deephistloss(survtime, event, hazards)
         else:
             raise NotImplementedError
 
@@ -783,32 +793,44 @@ class BaseSurvModel(BaseModel):
 
     def training_step(self, batch, batch_idx):
         output = self.forward(batch)
-        event, survtime, preds, loss = (
+        event, survtime, hazards, risk, S, loss = (
             output["event"],
             output["survtime"],
-            output["preds"],
+            output["hazards"],
+            output["risk"],
+            output["S"],
             output["loss"],
         )
-        self._log_metrics(preds, event, survtime, loss, "train")
+        self._log_metrics(
+            risk if risk is not None else hazards, event, survtime, loss, "train"
+        )
         return {
             "loss": loss,
-            "preds": preds,
+            "hazards": hazards,
+            "risk": risk,
+            "S": S,
             "event": event,
             "survtime": survtime,
         }
 
     def validation_step(self, batch, batch_idx):
         output = self.forward(batch)
-        event, survtime, preds, loss = (
+        event, survtime, hazards, risk, S, loss = (
             output["event"],
             output["survtime"],
-            output["preds"],
+            output["hazards"],
+            output["risk"],
+            output["S"],
             output["loss"],
         )
-        self._log_metrics(preds, event, survtime, loss, "val")
+        self._log_metrics(
+            risk if risk is not None else hazards, S, event, survtime, loss, "val"
+        )
         return {
             "val_loss": loss,
-            "val_preds": preds,
+            "val_hazards": hazards,
+            "val_risk": risk,
+            "val_S": S,
             "val_event": event,
             "val_survtime": survtime,
         }
@@ -816,18 +838,24 @@ class BaseSurvModel(BaseModel):
     def test_step(self, batch, batch_idx):
         output = self.forward(batch)
 
-        event, survtime, preds, loss = (
+        event, survtime, hazards, risk, S, loss = (
             output["event"],
             output["survtime"],
-            output["preds"],
+            output["hazards"],
+            output["risk"],
+            output["S"],
             output["loss"],
         )
 
-        self._log_metrics(preds, event, survtime, loss, "test")
+        self._log_metrics(
+            risk if risk is not None else hazards, S, event, survtime, loss, "test"
+        )
 
         return {
             "test_loss": loss,
-            "test_preds": preds,
+            "test_hazards": hazards,
+            "test_risk": risk,
+            "test_S": S,
             "event": event,
             "survtime": survtime,
         }
@@ -871,20 +899,34 @@ class BaseMILSurvModel(BaseSurvModel):
             batch["event"],
             batch["survtime"],
         )
+
+        if self.loss_type != "cox_loss" or (
+            len(survtime.shape) > 1 and survtime.shape[1] > 1
+        ):
+            survtime = torch.argmax(survtime, dim=1).view(self.batch_size, 1)
+
         # Prediction
         logits = self._forward(features)
         logits = torch.sigmoid(logits)
+
+        S, risk = None, None
+        if self.n_classes > 1 and logits.shape[1] > 1:
+            S = torch.cumprod(1 - logits, dim=1)
+            risk = -torch.sum(S, dim=1).detach().cpu().numpy()
+
         # Loss (on logits)
         loss = None
         if not is_predict:
-            loss = self.compute_loss(survtime, event, logits)
+            loss = self.compute_loss(survtime, event, logits, S)
             if self.l1_reg_weight:
                 loss = loss + self.l1_regularisation(l_w=self.l1_reg_weight)
 
         return {
             "event": event,
             "survtime": survtime,
-            "preds": logits,
+            "hazards": logits,
+            "risk": risk,
+            "S": S,
             "loss": loss,
             "slide_name": batch["slide_name"],
         }
