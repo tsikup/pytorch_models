@@ -824,7 +824,7 @@ class BaseSurvModel(BaseModel):
             output["loss"],
         )
         self._log_metrics(
-            risk if risk is not None else hazards, S, event, survtime, loss, "val"
+            risk if risk is not None else hazards, event, survtime, loss, "val"
         )
         return {
             "val_loss": loss,
@@ -848,7 +848,7 @@ class BaseSurvModel(BaseModel):
         )
 
         self._log_metrics(
-            risk if risk is not None else hazards, S, event, survtime, loss, "test"
+            risk if risk is not None else hazards, event, survtime, loss, "test"
         )
 
         return {
