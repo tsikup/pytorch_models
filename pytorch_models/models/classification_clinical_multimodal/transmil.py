@@ -72,6 +72,8 @@ class TransMIL_Clinical_Multimodal_PL(BaseClinicalMultimodalMILModel):
         multimodal_odim: int,
         embed_size: list = None,
         batch_norm: bool = True,
+        bilinear_scale_dim1: int = 1,
+        bilinear_scale_dim2: int = 1,
         multires_aggregation=None,
         multimodal_aggregation="concat",
         n_resolutions: int = 1,  # not used
@@ -89,6 +91,8 @@ class TransMIL_Clinical_Multimodal_PL(BaseClinicalMultimodalMILModel):
             multimodal_odim=multimodal_odim,
             embed_size=embed_size,
             batch_norm=batch_norm,
+            bilinear_scale_dim1=bilinear_scale_dim1,
+            bilinear_scale_dim2=bilinear_scale_dim2,
             dropout=dropout,
             multires_aggregation=multires_aggregation,
             multimodal_aggregation=multimodal_aggregation,
