@@ -242,14 +242,14 @@ def nll_loss(hazards, S, Y, c, alpha=0.4, eps=1e-7):
     :param hazards: (N,K); hazards for each bin (K) in batch (N)
     :param S: (N,K); cumulative product of 1 - hazards, i.e. survival probability at each bin
     :param Y: (N,1); ground truth bin, 1,2,...,k; i.e. the bin where the event happened
-    :param c: (N,1); eventship status, 0 or 1
+    :param c: (N,1); censorship status, 0 or 1
     :param alpha:
     :param eps:
     :return:
     """
     batch_size = len(Y)
     Y = Y.view(batch_size, 1)  # ground truth bin, 1,2,...,k
-    c = c.view(batch_size, 1).float()  # eventship status, 0 or 1
+    c = c.view(batch_size, 1).float()  # censorship status, 0 or 1
     if S is None:
         S = torch.cumprod(
             1 - hazards, dim=1
@@ -277,14 +277,14 @@ def ce_loss(hazards, S, Y, c, alpha=0.4, eps=1e-7):
     :param hazards: (N,K); hazards for each bin (K) in batch (N)
     :param S: (N,K); cumulative product of 1 - hazards, i.e. survival probability at each bin
     :param Y: (N,1); ground truth bin, 1,2,...,k; i.e. the bin where the event happened
-    :param c: (N,1); eventship status, 0 or 1
+    :param c: (N,1); censorship status, 0 or 1
     :param alpha:
     :param eps:
     :return:
     """
     batch_size = len(Y)
     Y = Y.view(batch_size, 1)  # ground truth bin, 1,2,...,k
-    c = c.view(batch_size, 1).float()  # eventship status, 0 or 1
+    c = c.view(batch_size, 1).float()  # censorship status, 0 or 1
     if S is None:
         S = torch.cumprod(
             1 - hazards, dim=1

@@ -91,6 +91,7 @@ class MMIL_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
             coords = batch["coords"]
         # Prediction
         logits = self._forward(features, coords)
+        logits = torch.sigmoid(logits)
         # Loss (on logits)
         loss = self.compute_loss(survtime, event, logits)
         if self.l1_reg_weight:
@@ -113,8 +114,8 @@ class MMIL_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
         clinical_cont = []
         imaging = []
         for idx, features in enumerate(features_batch):
-            clinical_cat.append(singlePatientFeatures.pop("clinical_cat", None))
-            clinical_cont.append(singlePatientFeatures.pop("clinical_cont", None))
+            clinical_cat.append(features.pop("clinical_cat", None))
+            clinical_cont.append(features.pop("clinical_cont", None))
             h: List[torch.Tensor] = [features[key] for key in features]
             if self.multires_aggregation in ["linear", "linear_2"]:
                 h = self.linear_agg(h)

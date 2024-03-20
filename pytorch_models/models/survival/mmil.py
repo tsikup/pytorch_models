@@ -68,6 +68,7 @@ class MMIL_PL_Surv(BaseMILSurvModel):
             coords = batch["coords"]
         # Prediction
         logits = self._forward(features, coords)
+        logits = torch.sigmoid(logits)
         # Loss (on logits)
         loss = self.compute_loss(survtime, event, logits)
         if self.l1_reg_weight:

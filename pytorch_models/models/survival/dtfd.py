@@ -56,6 +56,9 @@ class DTFD_PL_Surv(BaseMILSurvModel):
             features
         )  ### batch_size, batch_size x numGroup x fs
 
+        logits = torch.sigmoid(logits)
+        sub_logits = torch.sigmoid(sub_logits)
+
         sub_event = event.repeat(1, sub_logits.shape[1]).reshape(
             -1
         )  ### batch_size x numGroup -> batch_size * numGroup x 1

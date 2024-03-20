@@ -96,6 +96,7 @@ class CLAM_PL_Surv(BaseMILSurvModel):
             attention_only=False,
         )
         logits = logits.unsqueeze(1)
+        logits = torch.sigmoid(logits)
 
         loss = None
         if not is_predict:

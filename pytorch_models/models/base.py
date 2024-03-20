@@ -873,6 +873,7 @@ class BaseMILSurvModel(BaseSurvModel):
         )
         # Prediction
         logits = self._forward(features)
+        logits = torch.sigmoid(logits)
         # Loss (on logits)
         loss = None
         if not is_predict:
