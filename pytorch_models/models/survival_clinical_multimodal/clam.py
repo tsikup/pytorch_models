@@ -143,7 +143,6 @@ class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
             return_features=False,
             attention_only=False,
         )
-        logits = logits.unsqueeze(1)
         logits = torch.sigmoid(logits)
 
         S, risk = None, None
@@ -218,6 +217,6 @@ class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
         logits, preds, _ = self.model.forward(M)
 
         return (
-            logits[:, 1],
+            logits if self.loss_type != "cox_loss" else logits[:, 1].view(-1, 1),
             torch.mean(torch.stack(instance_loss)) if instance_eval else None,
         )
