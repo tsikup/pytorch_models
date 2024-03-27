@@ -953,8 +953,8 @@ class BaseMILSurvModel(BaseSurvModel):
         # Prediction
         logits = self._forward(features)
         res = self._calculate_surv_risk(logits)
-        hazards, S, risk = res.pop("hazards"), res.pop("surv"), res.pop("risk")
-        pmf, cif = res.pop("pmf"), res.pop("cif")
+        hazards, S, risk = res.pop("hazards", None), res.pop("surv", None), res.pop("risk", None)
+        pmf, cif = res.pop("pmf", None), res.pop("cif", None)
 
         # Loss (on logits)
         loss = None
