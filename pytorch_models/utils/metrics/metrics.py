@@ -39,7 +39,7 @@ def get_metrics(
 
 
 def get_survival_metrics(cindex_method="counts"):
-    metrics = MetricCollection[CIndex(method=cindex_method)]
+    metrics = MetricCollection([CIndex(method=cindex_method)])
     return metrics
 
 
