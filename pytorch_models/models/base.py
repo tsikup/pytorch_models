@@ -789,17 +789,17 @@ class BaseSurvModel(BaseModel):
             # https://github.com/mahmoodlab/MCAT/blob/master/models/model_coattn.py
             hazards = logits.sigmoid()
             return dict(hazards=hazards, **self.predict_logistic_hazard(logits))
-        elif self.loss_type in ["deephit_loss", "hybrid_deephist_loss", "pmf_loss"]:
+        elif self.loss_type in ["deephit_loss", "hybrid_deephist_loss"]:
             # https://github.com/havakv/pycox
             hazards = logits.softmax(1)
             return dict(hazards=hazards, **self.predict_deephit(logits))
-        elif self.loss_type == "pmf_loss":
+        elif self.loss_type == "nll_pmf_loss":
             hazards = logits.softmax(1)
             return dict(hazards=hazards, **self.predict_pmf(logits))
 
         raise NotImplementedError
 
-    def _compute_metrics(self, hazards, events, survtimes, mode):
+    def _compute_metrics(self, hazards, events, survtimes, S, mode):
         if mode == "val":
             metrics = self.val_metrics
         elif mode == "train":
