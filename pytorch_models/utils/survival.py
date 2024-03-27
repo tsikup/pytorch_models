@@ -371,7 +371,7 @@ class NLLSurvLoss(object):
 
     def __init__(self, alpha=0.15, type="nll_loss"):
         self.alpha = alpha
-        self.type = type.strip("_loss")
+        self.type = type.replace("_loss", "")
 
     def __call__(self, logits, S, Y, c):
         if self.type == "nll":
