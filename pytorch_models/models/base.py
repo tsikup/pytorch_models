@@ -726,8 +726,8 @@ class BaseSurvModel(BaseModel):
     def _define_loss(self, loss_type, alpha=0.5, sigma=1.0):
         if loss_type == "cox_loss":
             self._coxloss = CoxSurvLoss()
-        elif loss_type == "nll_loss":
-            self._nll_loss = NLLSurvLoss()
+        elif loss_type.startswith("nll"):
+            self._nll_loss = NLLSurvLoss(type=loss_type)
         elif loss_type == "deephit":
             raise NotImplementedError
             # self._deephistloss = MyDeepHitLoss(alpha, sigma)
@@ -953,7 +953,11 @@ class BaseMILSurvModel(BaseSurvModel):
         # Prediction
         logits = self._forward(features)
         res = self._calculate_surv_risk(logits)
-        hazards, S, risk = res.pop("hazards", None), res.pop("surv", None), res.pop("risk", None)
+        hazards, S, risk = (
+            res.pop("hazards", None),
+            res.pop("surv", None),
+            res.pop("risk", None),
+        )
         pmf, cif = res.pop("pmf", None), res.pop("cif", None)
 
         # Loss (on logits)
