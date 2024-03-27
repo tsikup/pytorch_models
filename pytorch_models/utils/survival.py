@@ -1,4 +1,6 @@
 import torch
+import numpy as np
+import pandas as pd
 from lifelines.statistics import logrank_test
 from pycox.evaluation import EvalSurv
 from pycox.models.loss import (
@@ -11,6 +13,7 @@ from pycox.models.loss import (
 )
 from torch import Tensor, nn
 from torchmetrics import Metric
+from torchmetrics.utilities import dim_zero_cat
 
 """
 Continuous Time Survival
@@ -237,20 +240,12 @@ class CIndex(Metric):
         survtimes: Tensor, shape (N,1) or (N); survival time
     """
 
-    def __init__(self, method="counts"):
+    def __init__(self, method="counts", cuts=None):
         super().__init__()
         assert method in ["counts", "pycox"]
         self.method = method
+        self.cuts = cuts
         self._init_states()
-
-    def _clear_states(self):
-        if self.method == "pycox":
-            self.S = []
-            self.survtimes = []
-            self.events = []
-        else:
-            self.concord = torch.tensor(0.0)
-            self.total = torch.tensor(0.0)
 
     def _init_states(self):
         if self.method == "pycox":
@@ -266,9 +261,9 @@ class CIndex(Metric):
         events = events.squeeze()
         survtimes = survtimes.squeeze()
         if self.method == "pycox":
-            self.S = torch.cat([self.S, S])
-            self.survtimes = torch.cat([self.survtimes, survtimes])
-            self.events = torch.cat([self.events, events])
+            self.S.append(S)
+            self.survtimes.append(survtimes)
+            self.events.append(events)
         else:
             hazards, events, survtimes = (
                 hazards.reshape(-1),
@@ -282,11 +277,15 @@ class CIndex(Metric):
 
     def compute(self):
         if self.method == "pycox":
-            eval_surv = EvalSurv(self.S, self.survtimes, self.events)
+            S = dim_zero_cat(self.S).cpu().detach().numpy()
+            S = pd.DataFrame(S.transpose(), self.cuts)
+            survtimes = dim_zero_cat(self.survtimes).cpu().detach().numpy()
+            events = dim_zero_cat(self.events).cpu().detach().numpy()
+            eval_surv = EvalSurv(S, survtimes, events)
             ci = eval_surv.concordance_td()
+            ci = torch.tensor(ci)
         else:
             ci = self.concord / self.total
-        self._clear_states()
         return ci
 
 
@@ -348,7 +347,7 @@ def nll_loss(hazards, S, Y, c, alpha=0.4, eps=1e-7):
 
 
 def _nll_logistic_hazard(phi: Tensor, idx_durations: Tensor, events: Tensor) -> Tensor:
-    return nll_logistic_hazard(phi, idx_durations, events, reduction="mean")
+    return nll_logistic_hazard(phi.float(), idx_durations, events.float(), reduction="mean")
 
 
 def _nll_pmf(

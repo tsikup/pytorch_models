@@ -706,6 +706,7 @@ class BaseSurvModel(BaseModel):
             cindex_method="pycox"
             if loss_type in ["nll_pmf_loss", "deephit_loss", "hybrid_deephist_loss"]
             else "counts",
+            cuts=self.config.dataset.cuts,
         ).clone(prefix="train_")
 
         self.val_metrics = get_metrics(
@@ -718,6 +719,7 @@ class BaseSurvModel(BaseModel):
             cindex_method="pycox"
             if loss_type in ["nll_pmf_loss", "deephit_loss", "hybrid_deephist_loss"]
             else "counts",
+            cuts=self.config.dataset.cuts,
         ).clone(prefix="val_")
 
         self.test_metrics = get_metrics(
@@ -730,6 +732,7 @@ class BaseSurvModel(BaseModel):
             cindex_method="pycox"
             if loss_type in ["nll_pmf_loss", "deephit_loss", "hybrid_deephist_loss"]
             else "counts",
+            cuts=self.config.dataset.cuts,
         ).clone(prefix="test_")
 
     def _define_loss(self, loss_type, alpha=0.5, sigma=1.0):

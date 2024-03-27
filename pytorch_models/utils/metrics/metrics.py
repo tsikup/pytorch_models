@@ -27,6 +27,7 @@ def get_metrics(
     segmentation=False,
     survival=False,
     cindex_method="counts",
+    cuts=None,
 ):
     assert not (
         segmentation and survival
@@ -34,12 +35,12 @@ def get_metrics(
     if segmentation:
         return get_segmentation_metrics(config, n_classes, mode, dist_sync_on_step)
     if survival:
-        return get_survival_metrics(cindex_method)
+        return get_survival_metrics(cindex_method, cuts)
     return get_classification_metrics(config, n_classes, mode, dist_sync_on_step)
 
 
-def get_survival_metrics(cindex_method="counts"):
-    metrics = MetricCollection([CIndex(method=cindex_method)])
+def get_survival_metrics(cindex_method="counts", cuts=None):
+    metrics = MetricCollection([CIndex(method=cindex_method, cuts=np.array(cuts))])
     return metrics
 
 
