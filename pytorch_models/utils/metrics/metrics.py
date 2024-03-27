@@ -26,6 +26,7 @@ def get_metrics(
     dist_sync_on_step=False,
     segmentation=False,
     survival=False,
+    cindex_method="counts",
 ):
     assert not (
         segmentation and survival
@@ -33,13 +34,12 @@ def get_metrics(
     if segmentation:
         return get_segmentation_metrics(config, n_classes, mode, dist_sync_on_step)
     if survival:
-        return get_survival_metrics()
+        return get_survival_metrics(cindex_method)
     return get_classification_metrics(config, n_classes, mode, dist_sync_on_step)
 
 
-def get_survival_metrics():
-    # metrics = MetricCollection([CIndex(), CoxLogRank(), AccuracyCox()])
-    metrics = MetricCollection([CIndex(), AccuracyCox()])
+def get_survival_metrics(cindex_method="counts"):
+    metrics = CIndex(method=cindex_method)
     return metrics
 
 

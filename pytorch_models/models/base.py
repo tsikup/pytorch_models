@@ -703,6 +703,9 @@ class BaseSurvModel(BaseModel):
             mode="train",
             segmentation=False,
             survival=True,
+            cindex_method="pycox"
+            if loss_type in ["nll_pmf_loss", "deephit_loss", "hybrid_deephist_loss"]
+            else "counts",
         ).clone(prefix="train_")
 
         self.val_metrics = get_metrics(
@@ -712,6 +715,9 @@ class BaseSurvModel(BaseModel):
             mode="val",
             segmentation=False,
             survival=True,
+            cindex_method="pycox"
+            if loss_type in ["nll_pmf_loss", "deephit_loss", "hybrid_deephist_loss"]
+            else "counts",
         ).clone(prefix="val_")
 
         self.test_metrics = get_metrics(
@@ -721,6 +727,9 @@ class BaseSurvModel(BaseModel):
             mode="test",
             segmentation=False,
             survival=True,
+            cindex_method="pycox"
+            if loss_type in ["nll_pmf_loss", "deephit_loss", "hybrid_deephist_loss"]
+            else "counts",
         ).clone(prefix="test_")
 
     def _define_loss(self, loss_type, alpha=0.5, sigma=1.0):
@@ -799,16 +808,16 @@ class BaseSurvModel(BaseModel):
 
         raise NotImplementedError
 
-    def _compute_metrics(self, hazards, events, survtimes, S, mode):
+    def _compute_metrics(self, hazards, S, events, survtimes, mode):
         if mode == "val":
             metrics = self.val_metrics
         elif mode == "train":
             metrics = self.train_metrics
         elif mode in ["eval", "test"]:
             metrics = self.test_metrics
-        metrics(hazards, events, survtimes)
+        metrics(hazards, S, events, survtimes)
 
-    def _log_metrics(self, hazards, events, survtimes, loss, mode):
+    def _log_metrics(self, hazards, S, events, survtimes, loss, mode):
         on_step = False if mode != "train" else True
         # https://github.com/Lightning-AI/lightning/issues/13210
         sync_dist = self.sync_dist and (
@@ -821,7 +830,7 @@ class BaseSurvModel(BaseModel):
         elif mode == "test":
             metrics = self.test_metrics
 
-        self._compute_metrics(hazards, events, survtimes, mode)
+        self._compute_metrics(hazards, S, events, survtimes, mode)
         self.log_dict(
             metrics, on_step=False, on_epoch=True, prog_bar=False, logger=True
         )
@@ -847,7 +856,7 @@ class BaseSurvModel(BaseModel):
             output["loss"],
         )
         self._log_metrics(
-            risk if risk is not None else hazards, event, survtime, loss, "train"
+            risk if risk is not None else hazards, S, event, survtime, loss, "train"
         )
         return {
             "loss": loss,
@@ -869,7 +878,7 @@ class BaseSurvModel(BaseModel):
             output["loss"],
         )
         self._log_metrics(
-            risk if risk is not None else hazards, event, survtime, loss, "val"
+            risk if risk is not None else hazards, S, event, survtime, loss, "val"
         )
         return {
             "val_loss": loss,
@@ -893,7 +902,7 @@ class BaseSurvModel(BaseModel):
         )
 
         self._log_metrics(
-            risk if risk is not None else hazards, event, survtime, loss, "test"
+            risk if risk is not None else hazards, S, event, survtime, loss, "test"
         )
 
         return {

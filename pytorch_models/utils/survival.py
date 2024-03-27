@@ -1,5 +1,6 @@
 import torch
 from lifelines.statistics import logrank_test
+from pycox.evaluation import EvalSurv
 from pycox.models.loss import (
     DeepHitSingleLoss,
     _Loss,
@@ -236,28 +237,57 @@ class CIndex(Metric):
         survtimes: Tensor, shape (N,1) or (N); survival time
     """
 
-    def __init__(self):
+    def __init__(self, method="counts"):
         super().__init__()
-        self.add_state("concord", default=torch.tensor(0.0), dist_reduce_fx="sum")
-        self.add_state("total", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        assert method in ["counts", "pycox"]
+        self.method = method
+        self._init_states()
 
-    def update(self, hazards: Tensor, events: Tensor, survtimes: Tensor):
+    def _clear_states(self):
+        if self.method == "pycox":
+            self.S = []
+            self.survtimes = []
+            self.events = []
+        else:
+            self.concord = torch.tensor(0.0)
+            self.total = torch.tensor(0.0)
+
+    def _init_states(self):
+        if self.method == "pycox":
+            self.add_state("S", default=[], dist_reduce_fx="cat")
+            self.add_state("survtimes", default=[], dist_reduce_fx="cat")
+            self.add_state("events", default=[], dist_reduce_fx="cat")
+        else:
+            self.add_state("concord", default=torch.tensor(0.0), dist_reduce_fx="sum")
+            self.add_state("total", default=torch.tensor(0.0), dist_reduce_fx="sum")
+
+    def update(self, hazards: Tensor, S: Tensor, events: Tensor, survtimes: Tensor):
         hazards = hazards.squeeze()
         events = events.squeeze()
         survtimes = survtimes.squeeze()
-        assert hazards.shape == events.shape == survtimes.shape
-        hazards, events, survtimes = (
-            hazards.reshape(-1),
-            events.reshape(-1),
-            survtimes.reshape(-1),
-        )
+        if self.method == "pycox":
+            self.S = torch.cat([self.S, S])
+            self.survtimes = torch.cat([self.survtimes, survtimes])
+            self.events = torch.cat([self.events, events])
+        else:
+            hazards, events, survtimes = (
+                hazards.reshape(-1),
+                events.reshape(-1),
+                survtimes.reshape(-1),
+            )
 
-        _concord, _total = cindex(hazards, events, survtimes, is_update=True)
-        self.concord += _concord
-        self.total += _total
+            _concord, _total = cindex(hazards, events, survtimes, is_update=True)
+            self.concord += _concord
+            self.total += _total
 
     def compute(self):
-        return self.concord / self.total
+        if self.method == "pycox":
+            eval_surv = EvalSurv(self.S, self.survtimes, self.events)
+            ci = eval_surv.concordance_td()
+        else:
+            ci = self.concord / self.total
+        self._clear_states()
+        return ci
 
 
 ##########################
