@@ -24,7 +24,7 @@ from pytorch_models.utils.survival import (
     CrossEntropySurvLoss,
     CoxSurvLoss,
 )
-from pytorch_models.utils.tensor import aggregate_features
+from pytorch_models.utils.tensor import aggregate_features, pad_col
 from ranger21 import Ranger21
 from timm.optim import AdaBelief, AdamP
 from torch.optim import (
@@ -737,21 +737,66 @@ class BaseSurvModel(BaseModel):
         else:
             raise NotImplementedError
 
-    def compute_loss(self, survtime, event, hazards, S):
+    def compute_loss(self, survtime, event, logits, S):
         if self.loss_type == "cox_loss":
-            return self._coxloss(hazards=hazards, survtimes=survtime, events=event)
-        elif self.loss_type == "nll_loss":
-            return self._nll_loss(hazards=hazards, S=S, Y=survtime, c=1 - event)
+            return self._coxloss(logits=logits, survtimes=survtime, events=event)
+        elif self.loss_type in [
+            "nll_loss",
+            "nll_logistic_hazard_loss",
+            "nll_pmf_loss",
+            "nll_pc_hazard_loss",
+        ]:
+            return self._nll_loss(logits=logits, S=S, Y=survtime, c=1 - event)
         elif self.loss_type == "deephit":
             raise NotImplementedError
-            # return self._deephistloss(survtimes=survtime, events=event, hazards=hazards)
+            # return self._deephistloss(survtimes=survtime, events=event, logits=hazards)
         elif self.loss_type == "hybrid_deephist":
             raise NotImplementedError
-            # return self._dynamic_deephistloss(survtime, event, hazards)
+            # return self._dynamic_deephistloss(survtime, event, logits)
         else:
             raise NotImplementedError
 
     def forward(self, batch, is_predict=False):
+        raise NotImplementedError
+
+    def predict_pmf(self, logits):
+        pmf = pad_col(logits).softmax(1)[:, :-1]
+        surv = 1 - pmf.cumsum(1)
+        return dict(pmf=pmf, surv=surv)
+
+    def predict_deephit(self, logits):
+        pmf = pad_col(logits.view(logits.size(0), -1)).softmax(1)[:, :-1]
+        pmf = pmf.view(logits.shape).transpose(0, 1).transpose(1, 2)
+        cif = pmf.cumsum(1)
+        surv = 1.0 - cif.sum(0)
+        return dict(pmf=pmf, cif=cif, surv=surv)
+
+    def predict_pchazard(self, logits, sub=1):
+        raise NotImplementedError
+
+    def predict_logistic_hazard(self, logits, epsilon=1e-7):
+        # surv = (1 - logits).add(epsilon).log().cumsum(1).exp()
+        surv = (1 - logits).cumprod(1)
+        risk = -torch.sum(surv, dim=1)
+        return dict(surv=surv, risk=risk)
+
+    def _calculate_surv_risk(self, logits):
+        if self.loss_type == "cox_loss":
+            # https://github.com/mahmoodlab/MCAT/blob/master/models/model_coattn.py
+            hazards = logits.sigmoid()
+            return dict(hazards=hazards, surv=None, risk=None)
+        elif self.loss_type in ["nll_loss", "nll_logistic_hazard_loss"]:
+            # https://github.com/mahmoodlab/MCAT/blob/master/models/model_coattn.py
+            hazards = logits.sigmoid()
+            return dict(hazards=hazards, **self.predict_logistic_hazard(logits))
+        elif self.loss_type in ["deephit_loss", "hybrid_deephist_loss", "pmf_loss"]:
+            # https://github.com/havakv/pycox
+            hazards = logits.softmax(1)
+            return dict(hazards=hazards, **self.predict_deephit(logits))
+        elif self.loss_type == "pmf_loss":
+            hazards = logits.softmax(1)
+            return dict(hazards=hazards, **self.predict_pmf(logits))
+
         raise NotImplementedError
 
     def _compute_metrics(self, hazards, events, survtimes, mode):
@@ -907,12 +952,9 @@ class BaseMILSurvModel(BaseSurvModel):
 
         # Prediction
         logits = self._forward(features)
-        logits = torch.sigmoid(logits)
-
-        S, risk = None, None
-        if self.n_classes > 1 and logits.shape[1] > 1:
-            S = torch.cumprod(1 - logits, dim=1)
-            risk = -torch.sum(S, dim=1).detach().cpu().numpy()
+        res = self._calculate_surv_risk(logits)
+        hazards, S, risk = res.pop("hazards"), res.pop("surv"), res.pop("risk")
+        pmf, cif = res.pop("pmf"), res.pop("cif")
 
         # Loss (on logits)
         loss = None
@@ -924,9 +966,11 @@ class BaseMILSurvModel(BaseSurvModel):
         return {
             "event": event,
             "survtime": survtime,
-            "hazards": logits,
+            "hazards": hazards,
             "risk": risk,
             "S": S,
+            "pmf": pmf,
+            "cif": cif,
             "loss": loss,
             "slide_name": batch["slide_name"],
         }

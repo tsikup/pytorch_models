@@ -1,9 +1,15 @@
 import torch
 from lifelines.statistics import logrank_test
-from pycox.models.loss import DeepHitSingleLoss, nll_pmf, _Loss
+from pycox.models.loss import (
+    DeepHitSingleLoss,
+    _Loss,
+    bce_surv_loss,
+    nll_logistic_hazard,
+    nll_pc_hazard_loss,
+    nll_pmf,
+)
 from torch import Tensor, nn
 from torchmetrics import Metric
-
 
 """
 Continuous Time Survival
@@ -11,6 +17,10 @@ Continuous Time Survival
 #######################
 # Functional Survival #
 #######################
+def coxloss_with_logits(survtime, event, hazard_pred):
+    return coxloss(survtime, event, torch.sigmoid(hazard_pred))
+
+
 def coxloss(survtime, event, hazard_pred):
     """
     A partial likelihood estimation (called Breslow estimation) function in Survival Analysis.
@@ -256,6 +266,11 @@ class CIndex(Metric):
 # def continuous_to_discrete_time():
 
 
+def nll_loss_with_logits(logits, S, Y, c, alpha=0.4, eps=1e-7):
+    hazards = torch.sigmoid(logits)
+    return nll_loss(hazards, S, Y, c, alpha=alpha, eps=eps)
+
+
 def nll_loss(hazards, S, Y, c, alpha=0.4, eps=1e-7):
     """A maximum likelihood estimation function in Survival Analysis.
 
@@ -302,43 +317,29 @@ def nll_loss(hazards, S, Y, c, alpha=0.4, eps=1e-7):
     return loss
 
 
-def ce_loss(hazards, S, Y, c, alpha=0.4, eps=1e-7):
-    """
-    This implementation is based on https://github.com/mahmoodlab/MCAT/blob/master/utils/utils.py
+def _nll_logistic_hazard(phi: Tensor, idx_durations: Tensor, events: Tensor) -> Tensor:
+    return nll_logistic_hazard(phi, idx_durations, events, reduction="mean")
 
-    :param hazards: (N,K); hazards for each bin (K) in batch (N)
-    :param S: (N,K); cumulative product of 1 - hazards, i.e. survival probability at each bin
-    :param Y: (N,1); ground truth bin, 1,2,...,k; i.e. the bin where the event happened
-    :param c: (N,1); censorship status, 0 or 1
-    :param alpha:
-    :param eps:
-    :return:
-    """
-    batch_size = len(Y)
-    if len(Y.shape) > 1 and Y.shape[1] > 1:
-        Y = Y.argmax(dim=1).view(batch_size, 1)  # ground truth bin, 1,2,...,k
-    else:
-        Y = Y.view(batch_size, 1)  # ground truth bin, 1,2,...,k
-    c = c.view(batch_size, 1).float()  # censorship status, 0 or 1
-    if S is None:
-        S = torch.cumprod(
-            1 - hazards, dim=1
-        )  # surival is cumulative product of 1 - hazards
-    # without padding, S(0) = S[0], h(0) = h[0]
-    # after padding, S(0) = S[1], S(1) = S[2], etc, h(0) = h[0]
-    # h[y] = h(1)
-    # S[1] = S(1)
-    S_padded = torch.cat([torch.ones_like(c), S], 1)
-    reg = -(1 - c) * (
-        torch.log(torch.gather(S_padded, 1, Y) + eps)
-        + torch.log(torch.gather(hazards, 1, Y).clamp(min=eps))
+
+def _nll_pmf(
+    phi: Tensor, idx_durations: Tensor, events: Tensor, epsilon: float = 1e-7
+) -> Tensor:
+    return nll_pmf(phi, idx_durations, events, reduction="mean", epsilon=epsilon)
+
+
+def _nll_pc_hazard_loss(
+    phi: Tensor,
+    idx_durations: Tensor,
+    events: Tensor,
+    interval_frac: Tensor,
+) -> Tensor:
+    return nll_pc_hazard_loss(
+        phi, idx_durations, events, interval_frac, reduction="mean"
     )
-    ce_l = -c * torch.log(torch.gather(S, 1, Y).clamp(min=eps)) - (1 - c) * torch.log(
-        1 - torch.gather(S, 1, Y).clamp(min=eps)
-    )
-    loss = (1 - alpha) * ce_l + alpha * reg
-    loss = loss.mean()
-    return loss
+
+
+def _bce_surv_loss(phi: Tensor, idx_durations: Tensor, events: Tensor) -> Tensor:
+    return bce_surv_loss(phi, idx_durations, events, reduction="mean")
 
 
 class CrossEntropySurvLoss(object):
@@ -354,11 +355,8 @@ class CrossEntropySurvLoss(object):
     def __init__(self, alpha=0.15):
         self.alpha = alpha
 
-    def __call__(self, hazards, S, Y, c, alpha=None):
-        if alpha is None:
-            return ce_loss(hazards, S, Y, c, alpha=self.alpha)
-        else:
-            return ce_loss(hazards, S, Y, c, alpha=alpha)
+    def __call__(self, logits, S, Y, c):
+        return _bce_surv_loss(logits, Y, c)
 
 
 class NLLSurvLoss(object):
@@ -371,14 +369,19 @@ class NLLSurvLoss(object):
         c: Tensor, shape (N,1); censor status (0 or 1)
     """
 
-    def __init__(self, alpha=0.15):
+    def __init__(self, alpha=0.15, type="nll_loss"):
         self.alpha = alpha
+        self.type = type.strip("_loss")
 
-    def __call__(self, hazards, S, Y, c, alpha=None):
-        if alpha is None:
-            return nll_loss(hazards, S, Y, c, alpha=self.alpha)
-        else:
-            return nll_loss(hazards, S, Y, c, alpha=alpha)
+    def __call__(self, logits, S, Y, c):
+        if self.type == "nll":
+            return nll_loss_with_logits(logits, S, Y, c)
+        elif self.type == "nll_pmf":
+            return _nll_pmf(logits, Y, c)
+        elif self.type == "nll_logistic_hazard":
+            return _nll_logistic_hazard(logits, Y, c)
+        elif self.type == "nll_pc_hazard":
+            raise NotImplementedError
 
 
 class CoxSurvLoss(object):
@@ -392,8 +395,8 @@ class CoxSurvLoss(object):
         survtimes: Tensor, shape (N,1); survival time
     """
 
-    def __call__(self, hazards, survtimes, events, **kwargs):
-        return coxloss(survtimes, events, hazards)
+    def __call__(self, logits, survtimes, events, **kwargs):
+        return coxloss_with_logits(survtimes, events, logits)
 
 
 class MyDeepHitLoss(nn.Module):
@@ -401,10 +404,10 @@ class MyDeepHitLoss(nn.Module):
         super().__init__()
         self.loss = DeepHitSingleLoss(alpha=alpha, sigma=sigma)
 
-    def forward(self, survtimes, events, hazards, **kwargs):
+    def forward(self, survtimes, events, logits, **kwargs):
         raise NotImplementedError
         rank_mat = None
-        return self.loss.forward(hazards, survtimes, events, rank_mat=rank_mat)
+        return self.loss.forward(logits, survtimes, events, rank_mat=rank_mat)
 
 
 ################################################

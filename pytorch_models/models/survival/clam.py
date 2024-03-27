@@ -101,12 +101,10 @@ class CLAM_PL_Surv(BaseMILSurvModel):
             attention_only=False,
         )
         logits = logits.view(survtime.shape[0], -1)
-        logits = torch.sigmoid(logits)
 
-        S, risk = None, None
-        if self.n_classes > 1 and logits.shape[1] > 1:
-            S = torch.cumprod(1 - logits, dim=1)
-            risk = -torch.sum(S, dim=1).detach().cpu().numpy()
+        res = self._calculate_surv_risk(logits)
+        hazards, S, risk = res.pop("hazards"), res.pop("surv"), res.pop("risk")
+        pmf, cif = res.pop("pmf"), res.pop("cif")
 
         loss = None
         if not is_predict:
@@ -122,9 +120,11 @@ class CLAM_PL_Surv(BaseMILSurvModel):
         return {
             "event": event,
             "survtime": survtime,
-            "hazards": logits,
+            "hazards": hazards,
             "risk": risk,
             "S": S,
+            "pmf": pmf,
+            "cif": cif,
             "loss": loss,
             "slide_name": batch["slide_name"],
         }
