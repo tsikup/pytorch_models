@@ -702,9 +702,7 @@ class BaseSurvModel(BaseModel):
             in [
                 "nll_pmf_loss",
                 "deephit_loss",
-                "hybrid_deephist_loss",
                 "deephit_single_loss",
-                "hybrid_deephist_single_loss",
             ]
             else "counts",
             cuts=self.config.dataset.cuts,
@@ -722,9 +720,7 @@ class BaseSurvModel(BaseModel):
             in [
                 "nll_pmf_loss",
                 "deephit_loss",
-                "hybrid_deephist_loss",
                 "deephit_single_loss",
-                "hybrid_deephist_single_loss",
             ]
             else "counts",
             cuts=self.config.dataset.cuts,
@@ -742,9 +738,7 @@ class BaseSurvModel(BaseModel):
             in [
                 "nll_pmf_loss",
                 "deephit_loss",
-                "hybrid_deephist_loss",
                 "deephit_single_loss",
-                "hybrid_deephist_single_loss",
             ]
             else "counts",
             cuts=self.config.dataset.cuts,
@@ -789,7 +783,7 @@ class BaseSurvModel(BaseModel):
         return dict(pmf=pmf, surv=surv, risk=risk)
 
     def predict_deephit(self, logits):
-        if self.loss_type in ["deephit_loss", "hybrid_deephist_loss"]:
+        if self.loss_type == "deephit_loss":
             pmf = pad_col(logits.view(logits.size(0), -1)).softmax(1)[:, :-1]
             pmf = pmf.view(logits.shape).transpose(0, 1).transpose(1, 2)
             cif = pmf.cumsum(1)
@@ -814,12 +808,7 @@ class BaseSurvModel(BaseModel):
             return dict(hazards=logits.sigmoid(), surv=None, risk=None)
         elif self.loss_type in ["nll_loss", "nll_logistic_hazard_loss"]:
             return self.predict_logistic_hazard(logits)
-        elif self.loss_type in [
-            "deephit_single_loss",
-            "hybrid_deephist_single_loss",
-            "deephit_loss",
-            "hybrid_deephist_loss",
-        ]:
+        elif self.loss_type in ["deephit_single_loss", "deephit_loss"]:
             # https://github.com/havakv/pycox
             return self.predict_deephit(logits)
         elif self.loss_type == "nll_pmf_loss":
