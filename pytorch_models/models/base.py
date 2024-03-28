@@ -17,13 +17,7 @@ from pytorch_models.models.utils import (
 from pytorch_models.optim.lookahead import Lookahead
 from pytorch_models.optim.utils import get_warmup_factor
 from pytorch_models.utils.metrics.metrics import get_metrics
-from pytorch_models.utils.survival import (
-    HybridDeepHitLoss,
-    MyDeepHitLoss,
-    NLLSurvLoss,
-    CrossEntropySurvLoss,
-    CoxSurvLoss,
-)
+from pytorch_models.utils.survival import CoxSurvLoss, MyDeepHitLoss, NLLSurvLoss
 from pytorch_models.utils.tensor import aggregate_features, pad_col
 from ranger21 import Ranger21
 from timm.optim import AdaBelief, AdamP
@@ -704,7 +698,14 @@ class BaseSurvModel(BaseModel):
             segmentation=False,
             survival=True,
             cindex_method="pycox"
-            if loss_type in ["nll_pmf_loss", "deephit_loss", "hybrid_deephist_loss"]
+            if loss_type
+            in [
+                "nll_pmf_loss",
+                "deephit_loss",
+                "hybrid_deephist_loss",
+                "deephit_single_loss",
+                "hybrid_deephist_single_loss",
+            ]
             else "counts",
             cuts=self.config.dataset.cuts,
         ).clone(prefix="train_")
@@ -717,7 +718,14 @@ class BaseSurvModel(BaseModel):
             segmentation=False,
             survival=True,
             cindex_method="pycox"
-            if loss_type in ["nll_pmf_loss", "deephit_loss", "hybrid_deephist_loss"]
+            if loss_type
+            in [
+                "nll_pmf_loss",
+                "deephit_loss",
+                "hybrid_deephist_loss",
+                "deephit_single_loss",
+                "hybrid_deephist_single_loss",
+            ]
             else "counts",
             cuts=self.config.dataset.cuts,
         ).clone(prefix="val_")
@@ -730,7 +738,14 @@ class BaseSurvModel(BaseModel):
             segmentation=False,
             survival=True,
             cindex_method="pycox"
-            if loss_type in ["nll_pmf_loss", "deephit_loss", "hybrid_deephist_loss"]
+            if loss_type
+            in [
+                "nll_pmf_loss",
+                "deephit_loss",
+                "hybrid_deephist_loss",
+                "deephit_single_loss",
+                "hybrid_deephist_single_loss",
+            ]
             else "counts",
             cuts=self.config.dataset.cuts,
         ).clone(prefix="test_")
@@ -740,16 +755,16 @@ class BaseSurvModel(BaseModel):
             self._coxloss = CoxSurvLoss()
         elif loss_type.startswith("nll"):
             self._nll_loss = NLLSurvLoss(type=loss_type)
-        elif loss_type == "deephit":
-            raise NotImplementedError
-            # self._deephistloss = MyDeepHitLoss(alpha, sigma)
-        elif loss_type == "hybrid_deephist":
-            raise NotImplementedError
-            # self._dynamic_deephistloss = HybridDeepHitLoss(alpha, sigma)
+        elif loss_type == "deephit_single_loss":
+            self._deephistloss = MyDeepHitLoss(single=True, alpha=alpha, sigma=sigma)
+        elif loss_type == "deephit_loss":
+            self._deephistloss = MyDeepHitLoss(single=False, alpha=alpha, sigma=sigma)
         else:
             raise NotImplementedError
 
-    def compute_loss(self, survtime, event, logits, S):
+    def compute_loss(
+        self, survtime, event, logits, S, hazards=None, survtime_cont=None
+    ):
         if self.loss_type == "cox_loss":
             return self._coxloss(logits=logits, survtimes=survtime, events=event)
         elif self.loss_type in [
@@ -759,12 +774,8 @@ class BaseSurvModel(BaseModel):
             "nll_pc_hazard_loss",
         ]:
             return self._nll_loss(logits=logits, S=S, Y=survtime, c=1 - event)
-        elif self.loss_type == "deephit":
-            raise NotImplementedError
-            # return self._deephistloss(survtimes=survtime, events=event, logits=hazards)
-        elif self.loss_type == "hybrid_deephist":
-            raise NotImplementedError
-            # return self._dynamic_deephistloss(survtime, event, logits)
+        elif self.loss_type in ["deephit", "deephit_single"]:
+            return self._deephistloss(survtimes=survtime, events=event, logits=logits)
         else:
             raise NotImplementedError
 
@@ -774,41 +785,45 @@ class BaseSurvModel(BaseModel):
     def predict_pmf(self, logits):
         pmf = pad_col(logits).softmax(1)[:, :-1]
         surv = 1 - pmf.cumsum(1)
-        return dict(pmf=pmf, surv=surv)
+        risk = -torch.sum(surv, dim=1)
+        return dict(pmf=pmf, surv=surv, risk=risk)
 
     def predict_deephit(self, logits):
-        pmf = pad_col(logits.view(logits.size(0), -1)).softmax(1)[:, :-1]
-        pmf = pmf.view(logits.shape).transpose(0, 1).transpose(1, 2)
-        cif = pmf.cumsum(1)
-        surv = 1.0 - cif.sum(0)
-        return dict(pmf=pmf, cif=cif, surv=surv)
+        if self.loss_type in ["deephit_loss", "hybrid_deephist_loss"]:
+            pmf = pad_col(logits.view(logits.size(0), -1)).softmax(1)[:, :-1]
+            pmf = pmf.view(logits.shape).transpose(0, 1).transpose(1, 2)
+            cif = pmf.cumsum(1)
+            surv = 1.0 - cif.sum(0)
+            risk = -torch.sum(surv, dim=1)
+            return dict(pmf=pmf, cif=cif, surv=surv, risk=risk)
+        return self.predict_pmf(logits)
 
     def predict_pchazard(self, logits, sub=1):
         raise NotImplementedError
 
     def predict_logistic_hazard(self, logits, epsilon=1e-7):
+        hazards = logits.sigmoid()
         # surv = (1 - logits).add(epsilon).log().cumsum(1).exp()
         surv = (1 - logits).cumprod(1)
         risk = -torch.sum(surv, dim=1)
-        return dict(surv=surv, risk=risk)
+        return dict(hazards=hazards, surv=surv, risk=risk)
 
     def _calculate_surv_risk(self, logits):
         if self.loss_type == "cox_loss":
             # https://github.com/mahmoodlab/MCAT/blob/master/models/model_coattn.py
-            hazards = logits.sigmoid()
-            return dict(hazards=hazards, surv=None, risk=None)
+            return dict(hazards=logits.sigmoid(), surv=None, risk=None)
         elif self.loss_type in ["nll_loss", "nll_logistic_hazard_loss"]:
-            # https://github.com/mahmoodlab/MCAT/blob/master/models/model_coattn.py
-            hazards = logits.sigmoid()
-            return dict(hazards=hazards, **self.predict_logistic_hazard(logits))
-        elif self.loss_type in ["deephit_loss", "hybrid_deephist_loss"]:
+            return self.predict_logistic_hazard(logits)
+        elif self.loss_type in [
+            "deephit_single_loss",
+            "hybrid_deephist_single_loss",
+            "deephit_loss",
+            "hybrid_deephist_loss",
+        ]:
             # https://github.com/havakv/pycox
-            hazards = logits.softmax(1)
-            return dict(hazards=hazards, **self.predict_deephit(logits))
+            return self.predict_deephit(logits)
         elif self.loss_type == "nll_pmf_loss":
-            hazards = logits.softmax(1)
-            return dict(hazards=hazards, **self.predict_pmf(logits))
-
+            return self.predict_pmf(logits)
         raise NotImplementedError
 
     def _compute_metrics(self, hazards, S, events, survtimes, mode):

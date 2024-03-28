@@ -1,15 +1,17 @@
-import torch
-import numpy as np
 import pandas as pd
+import torch
 from lifelines.statistics import logrank_test
 from pycox.evaluation import EvalSurv
+from pycox.models.data import pair_rank_mat
 from pycox.models.loss import (
+    DeepHitLoss,
     DeepHitSingleLoss,
     _Loss,
     bce_surv_loss,
     nll_logistic_hazard,
     nll_pc_hazard_loss,
     nll_pmf,
+    nll_pmf_cr,
 )
 from torch import Tensor, nn
 from torchmetrics import Metric
@@ -18,9 +20,8 @@ from torchmetrics.utilities import dim_zero_cat
 """
 Continuous Time Survival
 """
-#######################
-# Functional Survival #
-#######################
+
+
 def coxloss_with_logits(survtime, event, hazard_pred):
     return coxloss(survtime, event, torch.sigmoid(hazard_pred))
 
@@ -347,7 +348,9 @@ def nll_loss(hazards, S, Y, c, alpha=0.4, eps=1e-7):
 
 
 def _nll_logistic_hazard(phi: Tensor, idx_durations: Tensor, events: Tensor) -> Tensor:
-    return nll_logistic_hazard(phi.float(), idx_durations, events.float(), reduction="mean")
+    return nll_logistic_hazard(
+        phi.float(), idx_durations, events.float(), reduction="mean"
+    )
 
 
 def _nll_pmf(
@@ -429,55 +432,15 @@ class CoxSurvLoss(object):
 
 
 class MyDeepHitLoss(nn.Module):
-    def __init__(self, alpha=0.5, sigma=1.0):
+    def __init__(self, single=True, alpha=0.5, sigma=1.0):
         super().__init__()
-        self.loss = DeepHitSingleLoss(alpha=alpha, sigma=sigma)
+        if single:
+            self.loss = DeepHitSingleLoss(alpha=alpha, sigma=sigma)
+        else:
+            self.loss = DeepHitLoss(alpha=alpha, sigma=sigma)
 
-    def forward(self, survtimes, events, logits, **kwargs):
-        raise NotImplementedError
-        rank_mat = None
+    def forward(self, survtimes, events, logits):
+        assert survtimes.view(-1, 1).shape == events.view(-1, 1).shape
+        rank_mat = pair_rank_mat(survtimes.cpu().numpy(), events.cpu().numpy())
+        rank_mat = torch.Tensor(rank_mat).to(logits.device)
         return self.loss.forward(logits, survtimes, events, rank_mat=rank_mat)
-
-
-################################################
-# Hybrid Continuous and Discrete Time Survival #
-################################################
-class HybridDeepHitLoss(_Loss):
-    """Hybrid DeepHit Loss (ranking loss on continuous time and nll on discrete time)
-    loss = alpha * nll + (1 - alpha) * rank_loss
-
-    Arguments:
-        alpha {float} -- Weighting between likelihood and rank loss.
-
-    Keyword Arguments:
-        reduction {string} -- How to reduce the loss.
-            'none': No reduction.
-            'mean': Mean of tensor.
-            'sum': sum.
-    """
-
-    def __init__(self, alpha: float, reduction: str = "mean") -> None:
-        super().__init__(reduction)
-        self.alpha = alpha
-
-    @property
-    def alpha(self) -> float:
-        return self._alpha
-
-    @alpha.setter
-    def alpha(self, alpha: float) -> None:
-        if (alpha < 0) or (alpha > 1):
-            raise ValueError(f"Need `alpha` to be in [0, 1]. Got {alpha}.")
-        self._alpha = alpha
-
-    def forward(
-        self,
-        hazards: Tensor,
-        idx_durations: Tensor,
-        survtimes: Tensor,
-        events: Tensor,
-        rank_mat: Tensor,
-    ) -> Tensor:
-        nll = nll_pmf(hazards, idx_durations, events, self.reduction)
-        rank_loss = coxloss(survtimes, events, hazards)
-        return self.alpha * nll + (1.0 - self.alpha) * rank_loss
