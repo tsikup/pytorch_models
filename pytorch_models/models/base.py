@@ -768,7 +768,7 @@ class BaseSurvModel(BaseModel):
             "nll_pc_hazard_loss",
         ]:
             return self._nll_loss(logits=logits, S=S, Y=survtime, c=1 - event)
-        elif self.loss_type in ["deephit", "deephit_single"]:
+        elif self.loss_type in ["deephit_loss", "deephit_single_loss"]:
             return self._deephistloss(survtimes=survtime, events=event, logits=logits)
         else:
             raise NotImplementedError
