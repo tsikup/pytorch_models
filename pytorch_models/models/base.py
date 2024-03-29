@@ -756,9 +756,7 @@ class BaseSurvModel(BaseModel):
         else:
             raise NotImplementedError
 
-    def compute_loss(
-        self, survtime, event, logits, S, hazards=None, survtime_cont=None
-    ):
+    def compute_loss(self, survtime, event, logits, S):
         if self.loss_type == "cox_loss":
             return self._coxloss(logits=logits, survtimes=survtime, events=event)
         elif self.loss_type in [
@@ -789,6 +787,10 @@ class BaseSurvModel(BaseModel):
             cif = pmf.cumsum(1)
             surv = 1.0 - cif.sum(0)
             risk = -torch.sum(surv, dim=1)
+            # # Calculate risk at time T
+            # # https://github.com/chl8856/DeepHit/blob/master/summarize_results.py
+            # # calculate F(t | x, Y, t >= t_M) = \sum_{t_M <= \tau < t} P(\tau | x, Y, \tau > t_M)
+            # risk = np.sum(pred[:,:,:(eval_horizon+1)], axis=2) #risk score until EVAL_TIMES
             return dict(pmf=pmf, cif=cif, surv=surv, risk=risk)
         return self.predict_pmf(logits)
 

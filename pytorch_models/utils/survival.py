@@ -6,12 +6,10 @@ from pycox.models.data import pair_rank_mat
 from pycox.models.loss import (
     DeepHitLoss,
     DeepHitSingleLoss,
-    _Loss,
     bce_surv_loss,
     nll_logistic_hazard,
     nll_pc_hazard_loss,
     nll_pmf,
-    nll_pmf_cr,
 )
 from torch import Tensor, nn
 from torchmetrics import Metric
