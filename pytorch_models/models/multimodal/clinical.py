@@ -165,7 +165,7 @@ class ClinicalModel(nn.Module):
 
     def forward(self, categorical, continuous):
         if self.embed_size:
-            return self.clinical_model(categorical, continuous)
+            return self.clinical_model(categorical, continuous.float())
         else:
             x = torch.cat((categorical.float(), continuous.float()), dim=-1)
             return self.clinical_model(x)
