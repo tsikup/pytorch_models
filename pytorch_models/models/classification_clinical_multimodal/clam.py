@@ -264,9 +264,8 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
     def inst_eval(self, A, h, clinical, classifier, instance_integration_models):
         device = h.device
         if not self.instance_loss_on_gpu:
-            pass
-            # self.instance_loss_fn = self.instance_loss_fn.cuda(device.index)
-            # self.instance_loss_on_gpu = True
+            self.instance_loss_fn = self.instance_loss_fn.cuda(device.index)
+            self.instance_loss_on_gpu = True
         if len(A.shape) == 1:
             A = A.view(1, -1)
         top_p_ids = torch.topk(A, min(A.shape[1], self.k_sample))[1][-1]
@@ -288,9 +287,8 @@ class CLAM_SB_ClinincalMultimodal(nn.Module):
     def inst_eval_out(self, A, h, clinical, classifier, instance_integration_models):
         device = h.device
         if not self.instance_loss_on_gpu:
-            pass
-            # self.instance_loss_fn = self.instance_loss_fn.cuda(device.index)
-            # self.instance_loss_on_gpu = True
+            self.instance_loss_fn = self.instance_loss_fn.cuda(device.index)
+            self.instance_loss_on_gpu = True
         if len(A.shape) == 1:
             A = A.view(1, -1)
         top_p_ids = torch.topk(A, min(A.shape[1], self.k_sample))[1][-1]
