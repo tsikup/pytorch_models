@@ -87,13 +87,13 @@ class CLAM_PL_Surv(BaseMILSurvModel):
             batch["survtime"],
         )
 
-        if self.loss_type != "cox_loss" or (
+        if not self.loss_type.startswith("cox_loss") or (
             len(survtime.shape) > 1 and survtime.shape[1] > 1
         ):
             survtime = torch.argmax(survtime, dim=1).view(-1, 1)
 
         # Prediction
-        logits, instance_loss = self._forward(
+        logits, instance_loss, logits2 = self._forward(
             features_batch=features,
             event_batch=event,
             instance_eval=self.instance_eval and not is_predict,
@@ -103,13 +103,21 @@ class CLAM_PL_Surv(BaseMILSurvModel):
         logits = logits.view(survtime.shape[0], -1)
 
         res = self._calculate_surv_risk(logits)
-        hazards, S, risk = res.pop("hazards", None), res.pop("surv", None), res.pop("risk", None)
+        hazards, S, risk = (
+            res.pop("hazards", None),
+            res.pop("surv", None),
+            res.pop("risk", None),
+        )
         pmf, cif = res.pop("pmf", None), res.pop("cif", None)
 
         loss = None
         if not is_predict:
             # Loss (on logits)
-            loss = self.compute_loss(survtime, event, logits, S)
+            loss = (
+                self.compute_loss(survtime, event, (logits, logits2), S)
+                if self.loss_type == "cox_loss__ce"
+                else self.compute_loss(survtime, event, logits, S)
+            )
             if self.l1_reg_weight:
                 loss = loss + self.l1_regularisation(self.l1_reg_weight)
             if self.instance_eval:
@@ -138,6 +146,8 @@ class CLAM_PL_Surv(BaseMILSurvModel):
         attention_only=False,
     ):
         logits = []
+        if self.loss_type == "cox_loss__ce":
+            logits_2 = []
         instance_loss = []
         for idx, features in enumerate(features_batch):
             feats = [features[f].squeeze() for f in features.keys()]
@@ -151,15 +161,19 @@ class CLAM_PL_Surv(BaseMILSurvModel):
             )
             if self.loss_type == "cox_loss":
                 logits.append(_logits.squeeze()[1])
+            elif self.loss_type == "cox_loss__ce":
+                logits.append(_logits.squeeze()[1])
+                logits_2.append(_logits.squeeze()[0])
             else:
                 logits.append(_logits.squeeze())
             if instance_eval:
                 instance_loss.append(_results_dict["instance_loss"])
 
-        if instance_eval:
-            return torch.stack(logits, dim=0), torch.mean(torch.stack(instance_loss))
-        else:
-            return torch.stack(logits, dim=0), None
+        return (
+            torch.stack(logits, dim=0),
+            torch.mean(torch.stack(instance_loss)) if instance_eval else None,
+            torch.stack(logits_2, dim=0) if self.loss_type == "cox_loss__ce" else None,
+        )
 
 
 if __name__ == "__main__":

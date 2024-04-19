@@ -747,6 +747,12 @@ class BaseSurvModel(BaseModel):
     def _define_loss(self, loss_type, alpha=0.5, sigma=1.0):
         if loss_type == "cox_loss":
             self._coxloss = CoxSurvLoss()
+        elif loss_type == "cox_loss__ce":
+            assert (
+                self.config.model.classifier == "clam"
+            ), "Implemented only for CLAM models for now.."
+            self._coxloss = CoxSurvLoss()
+            self._ce = torch.nn.BCEWithLogitsLoss()
         elif loss_type.startswith("nll"):
             self._nll_loss = NLLSurvLoss(type=loss_type)
         elif loss_type == "deephit_single_loss":
@@ -759,6 +765,13 @@ class BaseSurvModel(BaseModel):
     def compute_loss(self, survtime, event, logits, S):
         if self.loss_type == "cox_loss":
             return self._coxloss(logits=logits, survtimes=survtime, events=event)
+        elif self.loss_type == "cox_loss__ce":
+            assert (isinstance(logits, list) or isinstance(logits, tuple)) and len(
+                logits
+            ) == 2
+            return self._coxloss(
+                logits=logits[0], survtimes=survtime, events=event
+            ) + self._ce(logits[1], event.float())
         elif self.loss_type in [
             "nll_loss",
             "nll_logistic_hazard_loss",
@@ -808,6 +821,9 @@ class BaseSurvModel(BaseModel):
         if self.loss_type == "cox_loss":
             # https://github.com/mahmoodlab/MCAT/blob/master/models/model_coattn.py
             return dict(hazards=logits.sigmoid(), surv=None, risk=None)
+        elif self.loss_type == "cox_loss__ce":
+            # https://github.com/mahmoodlab/MCAT/blob/master/models/model_coattn.py
+            return dict(hazards=logits[0].sigmoid(), surv=None, risk=None)
         elif self.loss_type in ["nll_loss", "nll_logistic_hazard_loss"]:
             return self.predict_logistic_hazard(logits)
         elif self.loss_type in ["deephit_single_loss", "deephit_loss"]:
@@ -963,7 +979,7 @@ class BaseMILSurvModel(BaseSurvModel):
             batch["survtime"],
         )
 
-        if self.loss_type != "cox_loss" or (
+        if not self.loss_type.startswith("cox_loss") or (
             len(survtime.shape) > 1 and survtime.shape[1] > 1
         ):
             survtime = torch.argmax(survtime, dim=1).view(-1, 1)

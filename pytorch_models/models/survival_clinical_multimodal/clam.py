@@ -130,13 +130,13 @@ class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
             batch["survtime"],
         )
 
-        if self.loss_type != "cox_loss" or (
+        if not self.loss_type.startswith("cox_loss") or (
             len(survtime.shape) > 1 and survtime.shape[1] > 1
         ):
             survtime = torch.argmax(survtime, dim=1).view(-1, 1)
 
         # Prediction
-        logits, instance_loss = self._forward(
+        logits, instance_loss, logits2 = self._forward(
             features_batch=features,
             event_batch=event,
             instance_eval=self.instance_eval and not is_predict,
@@ -155,7 +155,11 @@ class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
         loss = None
         if not is_predict:
             # Loss (on logits)
-            loss = self.compute_loss(survtime, event, logits, S)
+            loss = (
+                self.compute_loss(survtime, event, (logits, logits2), S)
+                if self.loss_type == "cox_loss__ce"
+                else self.compute_loss(survtime, event, logits, S)
+            )
             if self.l1_reg_weight:
                 loss = loss + self.l1_regularisation(self.l1_reg_weight)
             if self.instance_eval:
@@ -221,6 +225,9 @@ class CLAM_Clinical_Multimodal_PL_Surv(BaseClinicalMultimodalMILSurvModel):
         logits, preds, _ = self.model.forward(M)
 
         return (
-            logits if self.loss_type != "cox_loss" else logits[:, 1].view(-1, 1),
+            logits
+            if not self.loss_type.startswith("cox_loss")
+            else logits[:, 1].view(-1, 1),
             torch.mean(torch.stack(instance_loss)) if instance_eval else None,
+            logits[:, 0].view(-1, 1) if self.loss_type == "cox_loss__ce" else None,
         )
