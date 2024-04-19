@@ -818,12 +818,9 @@ class BaseSurvModel(BaseModel):
         return dict(hazards=hazards, surv=surv, risk=risk)
 
     def _calculate_surv_risk(self, logits):
-        if self.loss_type == "cox_loss":
+        if self.loss_type.startswith("cox_loss"):
             # https://github.com/mahmoodlab/MCAT/blob/master/models/model_coattn.py
             return dict(hazards=logits.sigmoid(), surv=None, risk=None)
-        elif self.loss_type == "cox_loss__ce":
-            # https://github.com/mahmoodlab/MCAT/blob/master/models/model_coattn.py
-            return dict(hazards=logits[0].sigmoid(), surv=None, risk=None)
         elif self.loss_type in ["nll_loss", "nll_logistic_hazard_loss"]:
             return self.predict_logistic_hazard(logits)
         elif self.loss_type in ["deephit_single_loss", "deephit_loss"]:
