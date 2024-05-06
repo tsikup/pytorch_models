@@ -105,7 +105,10 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
         if not is_predict:
             if is_adv:
                 # Loss (on logits)
-                _loss = self.loss.forward(logits, target.float())
+                if self.n_classes == 2:
+                    _loss = self.loss.forward(logits, target.reshape(-1))
+                else:
+                    _loss = self.loss.forward(logits, target.float())
                 preds_aux = self.aux_act(logits_aux)
                 _loss_aux_adv = torch.mean(
                     torch.sum(preds_aux * torch.log(preds_aux), 1)
@@ -113,7 +116,11 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
 
                 loss = _loss + _loss_aux_adv * self.aux_lambda
             else:
-                _loss_aux_mi = self.loss_aux.forward(logits_aux, sensitive_attr)
+                # Loss (on logits)
+                if self.n_classes == 2:
+                    _loss_aux_mi = self.loss_aux.forward(logits_aux, sensitive_attr.reshape(-1))
+                else:
+                    _loss_aux_mi = self.loss_aux.forward(logits_aux, sensitive_attr)
                 loss = _loss_aux_mi
 
         # Sigmoid or Softmax activation
