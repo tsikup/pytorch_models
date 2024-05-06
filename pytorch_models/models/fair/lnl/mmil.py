@@ -130,6 +130,7 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
 
     def _forward(self, features_batch, coords_batch=None, is_adv=True):
         logits = []
+        logits_aux = []
         for idx, singlePatientFeatures in enumerate(features_batch):
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
@@ -137,11 +138,12 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
             h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
-            _logits = self.model.forward(
+            _logits, _logits_aux = self.model.forward(
                 h, coords=coords_batch[idx] if coords_batch else None, is_adv=is_adv
             )
             logits.append(_logits)
-        return torch.vstack(logits)
+            logits_aux.append(_logits_aux)
+        return torch.vstack(logits), torch.vstack(logits_aux)
 
     def _compute_metrics(self, preds, target, mode):
         if mode == "val":
