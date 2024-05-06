@@ -41,7 +41,7 @@ class MMIL_LNL(_BaseLNL):
             feats_aux = grad_reverse(feats)
         else:
             feats_aux = feats
-        logits_aux = self.aux_model(feats_aux, coords)
+        logits_aux = self.aux_model(feats_aux)
         return logits, logits_aux
 
 

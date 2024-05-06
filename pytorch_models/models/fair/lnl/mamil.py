@@ -24,7 +24,7 @@ class MultiAttentionMIL_LNL(_BaseLNL):
             use_dropout=self.use_dropout,
             n_dropout=self.n_dropout,
         )
-        self.aux_model = nn.Sequential(nn.Linear(self.D, self.num_classes))
+        self.aux_model = nn.Linear(self.D, self.num_classes)
 
 
 class MAMIL_LNL_PL(BaseMILModel_LNL):
