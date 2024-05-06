@@ -50,6 +50,7 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
         self,
         config: DotMap,
         n_classes: int,
+        n_groups: int,
         size: Union[List[int], Tuple[int, int]] = None,
         num_msg: int = 1,
         num_subbags: int = 16,
@@ -60,7 +61,9 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
     ):
         if n_classes == 1:
             n_classes = 2
-        super(MMIL_LNL_PL, self).__init__(config, n_classes=n_classes)
+        super(MMIL_LNL_PL, self).__init__(
+            config, n_classes=n_classes, n_groups=n_groups
+        )
         assert len(size) == 2, "size must be a tuple of size 2"
 
         self.size = size
