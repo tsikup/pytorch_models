@@ -169,18 +169,3 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
             logits.append(_logits)
             logits_aux.append(_logits_aux)
         return torch.vstack(logits), torch.vstack(logits_aux)
-
-    def _compute_metrics(self, preds, target, mode):
-        if mode == "val":
-            metrics = self.val_metrics
-        elif mode == "train":
-            metrics = self.train_metrics
-        elif mode in ["eval", "test"]:
-            metrics = self.test_metrics
-        if self.n_classes in [1, 2]:
-            metrics(
-                preds,
-                nn.functional.one_hot(target.view(-1), num_classes=self.n_classes),
-            )
-        else:
-            metrics(preds, target.view(-1))

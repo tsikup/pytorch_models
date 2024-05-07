@@ -343,18 +343,3 @@ class MMIL_PL(BaseMILModel):
             _logits = self.model.forward(h, coords_batch[idx] if coords_batch else None)
             logits.append(_logits)
         return torch.vstack(logits)
-
-    def _compute_metrics(self, preds, target, mode):
-        if mode == "val":
-            metrics = self.val_metrics
-        elif mode == "train":
-            metrics = self.train_metrics
-        elif mode in ["eval", "test"]:
-            metrics = self.test_metrics
-        if self.n_classes in [1, 2]:
-            metrics(
-                preds,
-                nn.functional.one_hot(target.view(-1), num_classes=self.n_classes),
-            )
-        else:
-            metrics(preds, target.view(-1))
