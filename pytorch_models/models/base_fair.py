@@ -718,6 +718,7 @@ class BaseMILModel_LNL(BaseModel):
             segmentation=False,
             automatic_optimization=False,
         )
+        self.automatic_optimization = False
         self.n_groups = n_groups
         if self.n_groups == 1:
             self.aux_act = torch.nn.Sigmoid()
@@ -841,17 +842,22 @@ class BaseMILModel_LNL(BaseModel):
         opt.optimizer.zero_grad()
         opt_aux.optimizer.zero_grad()
         self.manual_backward(loss)
+        self.clip_gradients(opt, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
+        self.clip_gradients(opt_aux, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
         opt.step()
+        opt_aux.step()
+        
 
         # *************************** #
         # Mutual Information AUX Task #
         # *************************** #
         output_mi = self.forward(batch, is_adv=False)
         aux_mi_loss = output_mi["aux_mi_loss"]
-        opt.optimizer.zero_grad()
+        # opt.optimizer.zero_grad()
         opt_aux.optimizer.zero_grad()
         self.manual_backward(aux_mi_loss)
-        opt.step()
+        self.clip_gradients(opt_aux, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
+        # opt.step()
         opt_aux.step()
 
         lr_schedulers = self.lr_schedulers()
