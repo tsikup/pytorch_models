@@ -1,6 +1,7 @@
 """
 Data Efficient and Weakly Supervised Computational Pathology on Whole Slide Images. Nature Biomedical Engineering
 """
+import copy
 from typing import Union, List
 
 import torch
@@ -11,6 +12,7 @@ from topk.svm import SmoothTop1SVM
 from torch import Tensor
 
 from pytorch_models.models.base_fair import BaseMILModel_LNL
+from pytorch_models.models.fair.lnl.base import _BaseLNL
 from pytorch_models.models.fair.utils import grad_reverse
 from pytorch_models.models.utils import (
     LinearWeightedTransformationSum,
@@ -561,23 +563,64 @@ class CLAM_SB_LNL(nn.Module):
 
         return M, results_dict
 
-    def forward(
-        self,
-        M,
-        is_adv=False,
-    ):
+    def forward(self, feats, label, instance_eval=False):
+        h, A = self.main_model.forward_imaging(feats)
+        M, results_dict = self.main_model.forward_instance_eval(
+            h,
+            A,
+            label,
+            instance_eval=instance_eval,
+        )
         logits = self.classifiers(M)
+        return logits, A, M, results_dict
+
+
+class CLAM_LNL(_BaseLNL):
+    def __init__(
+        self,
+        gate,
+        size,
+        dropout,
+        k_sample,
+        n_classes,
+        n_groups,
+        instance_loss_fn,
+        subtyping,
+        linear_feature,
+        multires_aggregation,
+        attention_depth,
+        classifier_depth,
+        n_resolutions,
+    ):
+        super(CLAM_LNL, self).__init__()
+        self.main_model = CLAM_SB_LNL(
+            gate=gate,
+            size=size,
+            dropout=dropout,
+            k_sample=k_sample,
+            n_classes=n_classes,
+            n_groups=n_groups,
+            instance_loss_fn=instance_loss_fn,
+            subtyping=subtyping,
+            linear_feature=linear_feature,
+            multires_aggregation=multires_aggregation,
+            attention_depth=attention_depth,
+            classifier_depth=classifier_depth,
+            n_resolutions=n_resolutions,
+        )
+        self.aux_model = copy.deepcopy(self.main_model.aux_classifiers)
+        del self.main_model.aux_classifiers
+
+    def forward(self, feats, label, instance_eval=False, is_adv=True):
+        logits, A, M, results_dict = self.main_model.forward(
+            feats, label, instance_eval=instance_eval
+        )
         if not is_adv:
             M_aux = grad_reverse(M)
         else:
             M_aux = M
-        logits_aux = self.aux_classifiers(M_aux)
-        Y_hat = torch.topk(logits, 1, dim=1)[1]
-        Y_prob = F.softmax(logits, dim=1)
-        Y_hat_aux = torch.topk(logits_aux, 1, dim=1)[1]
-        preds_aux = F.softmax(logits_aux, dim=1)
-
-        return logits, Y_prob, Y_hat, logits_aux, preds_aux, Y_hat_aux
+        logits_aux = self.aux_model(M_aux)
+        return logits, logits_aux, A, results_dict
 
 
 class CLAM_PL_LNL(BaseMILModel_LNL):
@@ -631,19 +674,19 @@ class CLAM_PL_LNL(BaseMILModel_LNL):
         self.linear_feature = linear_feature
 
         if not self.multibranch:
-            self.model = CLAM_SB_LNL(
-                gate=self.gate,
-                size=self.size,
-                dropout=self.dropout,
-                k_sample=self.k_sample,
-                n_classes=self.n_classes,
-                n_groups=self.n_groups,
+            self.model = CLAM_LNL(
+                gate=gate,
+                size=size,
+                dropout=dropout,
+                k_sample=k_sample,
+                n_classes=n_classes,
+                n_groups=n_groups,
                 instance_loss_fn=instance_loss,
-                subtyping=self.subtyping,
-                linear_feature=self.linear_feature,
-                multires_aggregation=self.multires_aggregation,
-                attention_depth=self.attention_depth,
-                classifier_depth=self.classifier_depth,
+                subtyping=subtyping,
+                linear_feature=linear_feature,
+                multires_aggregation=multires_aggregation,
+                attention_depth=attention_depth,
+                classifier_depth=classifier_depth,
                 n_resolutions=n_resolutions,
             )
         else:
@@ -658,12 +701,11 @@ class CLAM_PL_LNL(BaseMILModel_LNL):
         )
 
         # Prediction
-        logits, preds, logits_aux, _, _, A, results_dict = self._forward(
+        logits, preds, logits_aux, _, A, results_dict = self._forward(
             features,
             labels=target,
             instance_eval=self.instance_eval and not is_predict,
-            return_features=False,
-            attention_only=False,
+            is_adv=is_adv,
         )
 
         loss = None
@@ -718,15 +760,13 @@ class CLAM_PL_LNL(BaseMILModel_LNL):
         features_batch,
         labels=None,
         instance_eval=False,
-        return_features=False,
-        attention_only=False,
+        is_adv=True,
     ):
         logits = []
         logits_aux = []
         preds = []
         preds_aux = []
         A = []
-        M = []
         results_dict = []
         for idx, singlePatientFeatures in enumerate(features_batch):
             feats = [
@@ -739,30 +779,24 @@ class CLAM_PL_LNL(BaseMILModel_LNL):
             else:
                 label = None
 
-            _h, _A = self.model.forward_imaging(feats)
-
-            _M, _results_dict = self.model.forward_instance_eval(
-                _h,
-                _A,
-                label,
-                instance_eval=instance_eval,
+            _logits, _logits_aux, _A, _results_dict = self.model.forward(
+                feats, label, instance_eval=instance_eval, is_adv=is_adv
             )
+            _preds = torch.nn.functional.softmax(_logits, dim=1)
+            _preds_aux = torch.nn.functional.softmax(_logits_aux, dim=1)
 
-            _logits, _preds, _, _logits_aux, _preds_aux, _ = self.model.forward(M)
             logits.append(_logits)
-            preds.append(_preds)
             logits_aux.append(_logits_aux)
+            preds.append(_preds)
             preds_aux.append(_preds_aux)
-            results_dict.append(_results_dict)
             A.append(_A)
-            M.append(_M)
+            results_dict.append(_results_dict)
 
         return (
             torch.vstack(logits),
             torch.vstack(preds),
             torch.vstack(logits_aux),
             torch.vstack(preds_aux),
-            None,
             A,
             results_dict,
         )
