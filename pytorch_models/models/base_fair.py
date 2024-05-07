@@ -947,34 +947,3 @@ class BaseMILModel_LNL(BaseModel):
     def predict_step(self, batch, batch_idx):
         output = self.forward(batch, is_predict=True, is_adv=True)
         return output["preds"], batch["labels"], batch["slide_name"]
-
-
-config = process_config(
-    "assets/tp53_uppsala_tcga/mmil_tcga_tnbc_lnl.yml",
-    name="test",
-    output_dir="experiments",
-    fold=0,
-    mkdirs=True,
-    config_copy=True,
-    version=0,
-)
-
-
-model = MMIL_LNL_PL(
-    config=config,
-    n_classes=config.dataset.num_classes,
-    n_groups=config.dataset.num_groups,
-    size=config.model.mmil.size,
-    num_msg=config.model.mmil.num_msg,
-    num_subbags=config.model.mmil.num_subbags,
-    mode=config.model.mmil.mode,
-    ape=config.model.mmil.ape,
-    num_layers=config.model.mmil.num_layers,
-    multires_aggregation=config.model.mmil.multires_aggregation,
-)
-
-train_dataset = FeatureDatasetHDF5(
-    data_dir="/mimer/NOBACKUP/groups/foukakis_ai/niktsi/data/TP53_Prediction/hdf5/TCGA_BALAZS_TP53_ER_STRAT/er_0_and_1/kfold/0_fold/train",
-    data_cols=config.dataset.data_cols,
-    base_label=config.dataset.base_label,
-)
