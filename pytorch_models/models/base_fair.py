@@ -118,7 +118,12 @@ class BaseMILModel_LAFTR(BaseMILModel):
         logits_adv = []
         for idx, patientFeatures in enumerate(features_batch):
             h: List[torch.Tensor] = [patientFeatures[key] for key in patientFeatures]
-            h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
+            if self.multires_aggregation in ["linear", "linear_2"]:
+                h = self.linear_agg(h)
+            else:
+                h: torch.Tensor = aggregate_features(
+                    h, method=self.multires_aggregation
+                )
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
             _logits, _features = self.model.forward(h, return_features=True)
@@ -240,7 +245,12 @@ class BaseMILModel_EnD(BaseMILModel):
         features = []
         for patientFeatures in features_batch:
             h: List[torch.Tensor] = [patientFeatures[key] for key in patientFeatures]
-            h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
+            if self.multires_aggregation in ["linear", "linear_2"]:
+                h = self.linear_agg(h)
+            else:
+                h: torch.Tensor = aggregate_features(
+                    h, method=self.multires_aggregation
+                )
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
             _logits, _features = self.model.forward(h, return_features=True)
@@ -432,7 +442,12 @@ class BaseMILModel_LearningFromFailure(BaseMILModel):
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
-            h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
+            if self.multires_aggregation in ["linear", "linear_2"]:
+                h = self.linear_agg(h)
+            else:
+                h: torch.Tensor = aggregate_features(
+                    h, method=self.multires_aggregation
+                )
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
             _logits_b = self.model_b.forward(h)
@@ -710,6 +725,8 @@ class BaseMILModel_LNL(BaseModel):
         aux_lambda: float = 0.1,
         size: List[int] = None,
         n_resolutions: int = 1,
+        gradient_clip_value: float = 0.5,
+        gradient_clip_algorithm: str = "norm",
     ):
         super(BaseMILModel_LNL, self).__init__(
             config,
@@ -729,6 +746,8 @@ class BaseMILModel_LNL(BaseModel):
         self.aux_lambda = aux_lambda
         self.multires_aggregation = multires_aggregation
         self.n_resolutions = n_resolutions
+        self.gradient_clip_algorithm = gradient_clip_algorithm
+        self.gradient_clip_value = gradient_clip_value
 
         if self.config.model.classifier != "clam":
             if self.multires_aggregation == "linear":
@@ -842,11 +861,18 @@ class BaseMILModel_LNL(BaseModel):
         opt.optimizer.zero_grad()
         opt_aux.optimizer.zero_grad()
         self.manual_backward(loss)
-        self.clip_gradients(opt, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
-        self.clip_gradients(opt_aux, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
+        self.clip_gradients(
+            opt,
+            gradient_clip_val=self.gradient_clip_value,
+            gradient_clip_algorithm=self.gradient_clip_algorithm,
+        )
+        self.clip_gradients(
+            opt_aux,
+            gradient_clip_val=self.gradient_clip_value,
+            gradient_clip_algorithm=self.gradient_clip_algorithm,
+        )
         opt.step()
         opt_aux.step()
-        
 
         # *************************** #
         # Mutual Information AUX Task #
@@ -856,7 +882,11 @@ class BaseMILModel_LNL(BaseModel):
         # opt.optimizer.zero_grad()
         opt_aux.optimizer.zero_grad()
         self.manual_backward(aux_mi_loss)
-        self.clip_gradients(opt_aux, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
+        self.clip_gradients(
+            opt_aux,
+            gradient_clip_val=self.gradient_clip_value,
+            gradient_clip_algorithm=self.gradient_clip_algorithm,
+        )
         # opt.step()
         opt_aux.step()
 
