@@ -199,6 +199,9 @@ class MINet_LNL_PL(BaseMILModel_LNL):
         if self.n_classes == 2:
             self.n_classes = 1
 
+        if self.n_groups == 2:
+            self.n_groups = 1
+
         if self.n_classes == 1:
             self.loss = nn.BCELoss()
         else:

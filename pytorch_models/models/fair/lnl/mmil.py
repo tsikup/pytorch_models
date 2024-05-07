@@ -61,6 +61,8 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
     ):
         if n_classes == 1:
             n_classes = 2
+        if self.n_groups == 1:
+            self.n_groups = 2
         super(MMIL_LNL_PL, self).__init__(
             config, n_classes=n_classes, n_groups=n_groups
         )
@@ -118,7 +120,9 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
             else:
                 # Loss (on logits)
                 if self.n_classes == 2:
-                    _loss_aux_mi = self.loss_aux.forward(logits_aux, sensitive_attr.reshape(-1))
+                    _loss_aux_mi = self.loss_aux.forward(
+                        logits_aux, sensitive_attr.reshape(-1)
+                    )
                 else:
                     _loss_aux_mi = self.loss_aux.forward(logits_aux, sensitive_attr)
                 loss = _loss_aux_mi

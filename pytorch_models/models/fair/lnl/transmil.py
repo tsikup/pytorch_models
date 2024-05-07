@@ -26,6 +26,8 @@ class TransMIL_LNL_PL(BaseMILModel_LNL):
     ):
         if n_classes == 2:
             n_classes = 1
+        if self.n_groups == 2:
+            self.n_groups = 1
         super(TransMIL_LNL_PL, self).__init__(
             config, n_classes=n_classes, n_groups=n_groups
         )

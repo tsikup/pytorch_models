@@ -46,6 +46,9 @@ class MAMIL_LNL_PL(BaseMILModel_LNL):
         if self.n_classes == 2:
             self.n_classes = 1
 
+        if self.n_groups == 2:
+            self.n_groups = 1
+
         self.multires_aggregation = multires_aggregation
         self.dropout = dropout
 
