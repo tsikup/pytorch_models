@@ -565,8 +565,8 @@ class CLAM_SB_LNL(nn.Module):
         return M, results_dict
 
     def forward(self, feats, label, instance_eval=False):
-        h, A = self.main_model.forward_imaging(feats)
-        M, results_dict = self.main_model.forward_instance_eval(
+        h, A = self.forward_imaging(feats)
+        M, results_dict = self.forward_instance_eval(
             h,
             A,
             label,
