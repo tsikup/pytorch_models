@@ -295,6 +295,7 @@ class CLAM_SB_LNL(nn.Module):
             )
         else:
             self.classifiers = nn.Linear(self.classifier_size[0], n_classes)
+            self.aux_classifiers = nn.Linear(self.classifier_size[0], n_groups)
 
             instance_classifiers = [
                 nn.Linear(self.classifier_size[0] // _downsample, 2)
