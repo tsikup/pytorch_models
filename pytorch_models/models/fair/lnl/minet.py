@@ -183,6 +183,7 @@ class MINet_LNL_PL(BaseMILModel_LNL):
             n_classes=n_classes,
             n_groups=n_groups,
             multires_aggregation=multires_aggregation,
+            size=size,
         )
         self.n_groups = n_groups
         if self.n_classes > 2:

@@ -68,6 +68,7 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
             n_classes=n_classes,
             n_groups=n_groups,
             multires_aggregation=multires_aggregation,
+            size=size,
         )
         assert len(size) == 2, "size must be a tuple of size 2"
 
