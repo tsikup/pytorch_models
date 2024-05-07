@@ -296,7 +296,12 @@ class MINet_LNL_PL(BaseMILModel_LNL):
         logits_aux = []
         for patientFeatures in features:
             h: List[torch.Tensor] = [patientFeatures[key] for key in patientFeatures]
-            h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
+            if self.multires_aggregation in ["linear", "linear_2"]:
+                h = self.linear_agg(h)
+            else:
+                h: torch.Tensor = aggregate_features(
+                    h, method=self.multires_aggregation
+                )
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
             o = self.model.forward(h, is_adv=is_adv)

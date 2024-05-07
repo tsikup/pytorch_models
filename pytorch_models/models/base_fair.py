@@ -9,6 +9,10 @@ from pytorch_models.losses.gce import EMA, GeneralizedCELoss
 from pytorch_models.losses.losses import get_loss
 from pytorch_models.models.base import BaseMILModel, BaseModel
 from pytorch_models.models.fair.group_dro.loss import GroupDROLoss
+from pytorch_models.models.utils import (
+    LinearWeightedTransformationSum,
+    LinearWeightedSum,
+)
 from pytorch_models.utils.tensor import aggregate_features
 
 
@@ -703,6 +707,8 @@ class BaseMILModel_LNL(BaseModel):
         n_classes: int,
         n_groups: int,
         aux_lambda: float = 0.1,
+        size: List[int] = None,
+        n_resolutions: int = 1,
     ):
         super(BaseMILModel_LNL, self).__init__(
             config,
@@ -712,8 +718,6 @@ class BaseMILModel_LNL(BaseModel):
             automatic_optimization=False,
         )
         self.n_groups = n_groups
-        if self.n_groups == 2:
-            self.n_groups = 1
         if self.n_groups == 1:
             self.aux_act = torch.nn.Sigmoid()
             self.loss_aux = get_loss(["bce"])
@@ -721,6 +725,18 @@ class BaseMILModel_LNL(BaseModel):
             self.aux_act = torch.nn.Softmax(dim=1)
             self.loss_aux = get_loss(["ce"])
         self.aux_lambda = aux_lambda
+
+        self.n_resolutions = n_resolutions
+
+        if self.config.model.classifier != "clam":
+            if self.multires_aggregation == "linear":
+                assert size is not None
+                self.linear_agg = LinearWeightedTransformationSum(
+                    size[0], self.n_resolutions
+                )
+            elif self.multires_aggregation == "linear_2":
+                assert size is not None
+                self.linear_agg = LinearWeightedSum(size[0], self.n_resolutions)
 
     def forward(self, batch, is_predict=False, is_adv=True):
         # Batch
@@ -739,7 +755,10 @@ class BaseMILModel_LNL(BaseModel):
         if not is_predict:
             if is_adv:
                 # Loss (on logits)
-                _loss = self.loss.forward(logits, target.float())
+                if self.n_classes == 2:
+                    _loss = self.loss.forward(logits, target.reshape(-1))
+                else:
+                    _loss = self.loss.forward(logits, target.float())
                 preds_aux = self.aux_act(logits_aux)
                 _loss_aux_adv = torch.mean(
                     torch.sum(preds_aux * torch.log(preds_aux), 1)
@@ -747,7 +766,12 @@ class BaseMILModel_LNL(BaseModel):
 
                 loss = _loss + _loss_aux_adv * self.aux_lambda
             else:
-                _loss_aux_mi = self.loss_aux.forward(logits_aux, sensitive_attr)
+                if self.n_classes == 2:
+                    _loss_aux_mi = self.loss_aux.forward(
+                        logits_aux, sensitive_attr.reshape(-1)
+                    )
+                else:
+                    _loss_aux_mi = self.loss_aux.forward(logits_aux, sensitive_attr)
                 loss = _loss_aux_mi
 
         # Sigmoid or Softmax activation
@@ -772,7 +796,12 @@ class BaseMILModel_LNL(BaseModel):
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
-            h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
+            if self.multires_aggregation in ["linear", "linear_2"]:
+                h = self.linear_agg(h)
+            else:
+                h: torch.Tensor = aggregate_features(
+                    h, method=self.multires_aggregation
+                )
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
             _logits, _logits_aux = self.model.forward(h, is_adv=is_adv)
@@ -918,3 +947,34 @@ class BaseMILModel_LNL(BaseModel):
     def predict_step(self, batch, batch_idx):
         output = self.forward(batch, is_predict=True, is_adv=True)
         return output["preds"], batch["labels"], batch["slide_name"]
+
+
+config = process_config(
+    "assets/tp53_uppsala_tcga/mmil_tcga_tnbc_lnl.yml",
+    name="test",
+    output_dir="experiments",
+    fold=0,
+    mkdirs=True,
+    config_copy=True,
+    version=0,
+)
+
+
+model = MMIL_LNL_PL(
+    config=config,
+    n_classes=config.dataset.num_classes,
+    n_groups=config.dataset.num_groups,
+    size=config.model.mmil.size,
+    num_msg=config.model.mmil.num_msg,
+    num_subbags=config.model.mmil.num_subbags,
+    mode=config.model.mmil.mode,
+    ape=config.model.mmil.ape,
+    num_layers=config.model.mmil.num_layers,
+    multires_aggregation=config.model.mmil.multires_aggregation,
+)
+
+train_dataset = FeatureDatasetHDF5(
+    data_dir="/mimer/NOBACKUP/groups/foukakis_ai/niktsi/data/TP53_Prediction/hdf5/TCGA_BALAZS_TP53_ER_STRAT/er_0_and_1/kfold/0_fold/train",
+    data_cols=config.dataset.data_cols,
+    base_label=config.dataset.base_label,
+)

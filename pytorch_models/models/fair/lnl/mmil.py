@@ -147,6 +147,12 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
             h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
+            if self.multires_aggregation in ["linear", "linear_2"]:
+                h = self.linear_agg(h)
+            else:
+                h: torch.Tensor = aggregate_features(
+                    h, method=self.multires_aggregation
+                )
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
             _logits, _logits_aux = self.model.forward(
