@@ -146,7 +146,6 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
             h: List[torch.Tensor] = [
                 singlePatientFeatures[key] for key in singlePatientFeatures
             ]
-            h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
             if self.multires_aggregation in ["linear", "linear_2"]:
                 h = self.linear_agg(h)
             else:
