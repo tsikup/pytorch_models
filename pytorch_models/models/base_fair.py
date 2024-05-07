@@ -706,6 +706,7 @@ class BaseMILModel_LNL(BaseModel):
         config: DotMap,
         n_classes: int,
         n_groups: int,
+        multires_aggregation: str,
         aux_lambda: float = 0.1,
         size: List[int] = None,
         n_resolutions: int = 1,
@@ -725,7 +726,7 @@ class BaseMILModel_LNL(BaseModel):
             self.aux_act = torch.nn.Softmax(dim=1)
             self.loss_aux = get_loss(["ce"])
         self.aux_lambda = aux_lambda
-
+        self.multires_aggregation = multires_aggregation
         self.n_resolutions = n_resolutions
 
         if self.config.model.classifier != "clam":

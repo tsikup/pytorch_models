@@ -42,13 +42,15 @@ class MAMIL_LNL_PL(BaseMILModel_LNL):
         if n_classes == 2:
             n_classes = 1
         super(MAMIL_LNL_PL, self).__init__(
-            config, n_classes=n_classes, n_groups=n_groups
+            config,
+            n_classes=n_classes,
+            n_groups=n_groups,
+            multires_aggregation=multires_aggregation,
         )
         assert (
             len(size) >= 2
         ), "size must be a tuple of (n_features, layer1_size, layer2_size, ...)"
 
-        self.multires_aggregation = multires_aggregation
         self.dropout = dropout
 
         self.model = MultiAttentionMIL_LNL(

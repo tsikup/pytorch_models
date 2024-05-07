@@ -64,7 +64,10 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
         if n_groups == 1:
             n_groups = 2
         super(MMIL_LNL_PL, self).__init__(
-            config, n_classes=n_classes, n_groups=n_groups
+            config,
+            n_classes=n_classes,
+            n_groups=n_groups,
+            multires_aggregation=multires_aggregation,
         )
         assert len(size) == 2, "size must be a tuple of size 2"
 
@@ -74,7 +77,6 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
         self.grouping_mode = mode
         self.ape = ape
         self.num_layers = num_layers
-        self.multires_aggregation = multires_aggregation
 
         self.model = MMIL_LNL(
             in_chans=self.size[0],

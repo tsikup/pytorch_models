@@ -179,7 +179,10 @@ class MINet_LNL_PL(BaseMILModel_LNL):
         if n_groups == 2:
             n_groups = 1
         super(MINet_LNL_PL, self).__init__(
-            config, n_classes=n_classes, n_groups=n_groups
+            config,
+            n_classes=n_classes,
+            n_groups=n_groups,
+            multires_aggregation=multires_aggregation,
         )
         self.n_groups = n_groups
         if self.n_classes > 2:
@@ -197,7 +200,6 @@ class MINet_LNL_PL(BaseMILModel_LNL):
 
         self.dropout = dropout
         self.pooling_mode = pooling_mode
-        self.multires_aggregation = multires_aggregation
 
         if self.config.model.classifier == "minet_naive":
             assert len(size) == 4, "size must be a list of 4 integers"
