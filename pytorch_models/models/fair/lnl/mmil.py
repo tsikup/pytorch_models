@@ -61,8 +61,8 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
     ):
         if n_classes == 1:
             n_classes = 2
-        if self.n_groups == 1:
-            self.n_groups = 2
+        if n_groups == 1:
+            n_groups = 2
         super(MMIL_LNL_PL, self).__init__(
             config, n_classes=n_classes, n_groups=n_groups
         )

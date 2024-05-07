@@ -37,17 +37,16 @@ class MAMIL_LNL_PL(BaseMILModel_LNL):
         dropout: bool = True,
         multires_aggregation: Union[None, str] = None,
     ):
+        if n_groups == 2:
+            n_groups = 1
+        if n_classes == 2:
+            n_classes = 1
         super(MAMIL_LNL_PL, self).__init__(
             config, n_classes=n_classes, n_groups=n_groups
         )
         assert (
             len(size) >= 2
         ), "size must be a tuple of (n_features, layer1_size, layer2_size, ...)"
-        if self.n_classes == 2:
-            self.n_classes = 1
-
-        if self.n_groups == 2:
-            self.n_groups = 1
 
         self.multires_aggregation = multires_aggregation
         self.dropout = dropout

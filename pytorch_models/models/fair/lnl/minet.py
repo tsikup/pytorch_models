@@ -25,11 +25,7 @@ class mi_NET_LNL(nn.Module):
         super(mi_NET_LNL, self).__init__()
         self.size = size
         self.n_classes = n_classes
-        if self.n_classes == 2:
-            self.n_classes = 1
         self.n_groups = n_groups
-        if self.n_groups == 2:
-            self.n_groups = 1
         self.pooling_mode = pooling_mode
 
         self.main_model = mi_NET(
@@ -56,11 +52,7 @@ class MI_Net_LNL(nn.Module):
         super(MI_Net_LNL, self).__init__()
         self.size = size
         self.n_classes = n_classes
-        if self.n_classes == 2:
-            self.n_classes = 1
         self.n_groups = n_groups
-        if self.n_groups == 2:
-            self.n_groups = 1
         self.pooling_mode = pooling_mode
 
         self.main_model = MI_Net(
@@ -87,11 +79,7 @@ class MI_Net_DS_LNL(nn.Module):
         super(MI_Net_DS_LNL, self).__init__()
         self.size = size
         self.n_classes = n_classes
-        if self.n_classes == 2:
-            self.n_classes = 1
         self.n_groups = n_groups
-        if self.n_groups == 2:
-            self.n_groups = 1
         self.pooling_mode = pooling_mode
 
         self.main_model = MI_Net_DS(
@@ -141,11 +129,7 @@ class MI_Net_RC_LNL(nn.Module):
         super(MI_Net_RC_LNL, self).__init__()
         self.size = size
         self.n_classes = n_classes
-        if self.n_classes == 2:
-            self.n_classes = 1
         self.n_groups = n_groups
-        if self.n_groups == 2:
-            self.n_groups = 1
         self.pooling_mode = pooling_mode
 
         if len(size) > 2:
@@ -190,17 +174,16 @@ class MINet_LNL_PL(BaseMILModel_LNL):
         pooling_mode="max",
         multires_aggregation: Union[None, str] = None,
     ):
+        if n_classes == 2:
+            n_classes = 1
+        if n_groups == 2:
+            n_groups = 1
         super(MINet_LNL_PL, self).__init__(
             config, n_classes=n_classes, n_groups=n_groups
         )
         self.n_groups = n_groups
         if self.n_classes > 2:
             raise NotImplementedError
-        if self.n_classes == 2:
-            self.n_classes = 1
-
-        if self.n_groups == 2:
-            self.n_groups = 1
 
         if self.n_classes == 1:
             self.loss = nn.BCELoss()
