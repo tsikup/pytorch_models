@@ -116,7 +116,7 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
                     _loss = self.loss.forward(logits, target.float())
                 preds_aux = self.aux_act(logits_aux)
                 _loss_aux_adv = torch.mean(
-                    torch.sum(preds_aux * torch.log(preds_aux), 1)
+                    torch.sum(preds_aux * torch.log(preds_aux + 1e-5), 1)
                 )
 
                 loss = _loss + _loss_aux_adv * self.aux_lambda

@@ -254,7 +254,9 @@ class MINet_LNL_PL(BaseMILModel_LNL):
                 _loss = self.loss.forward(torch.log(preds), target)
             else:
                 _loss = self.loss.forward(preds.float(), target.float())
-            _loss_aux_adv = torch.mean(torch.sum(preds_aux * torch.log(preds_aux), 1))
+            _loss_aux_adv = torch.mean(
+                torch.sum(preds_aux * torch.log(preds_aux + 1e-5), 1)
+            )
             loss = _loss + _loss_aux_adv * self.aux_lambda
         else:
             if self.n_groups > 2:
