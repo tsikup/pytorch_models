@@ -36,6 +36,8 @@ class MAMIL_LNL_PL(BaseMILModel_LNL):
         size: Union[List[int], Tuple[int, int]] = None,
         dropout: bool = True,
         multires_aggregation: Union[None, str] = None,
+        gradient_clip_value: float = 0.5,
+        gradient_clip_algorithm: str = "norm",
     ):
         if n_groups == 2:
             n_groups = 1
@@ -47,6 +49,8 @@ class MAMIL_LNL_PL(BaseMILModel_LNL):
             n_groups=n_groups,
             multires_aggregation=multires_aggregation,
             size=size,
+            gradient_clip_value=gradient_clip_value,
+            gradient_clip_algorithm=gradient_clip_algorithm,
         )
         assert (
             len(size) >= 2

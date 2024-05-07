@@ -58,6 +58,8 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
         ape: bool = True,
         num_layers: int = 2,
         multires_aggregation: Union[None, str] = None,
+        gradient_clip_value: float = 0.5,
+        gradient_clip_algorithm: str = "norm",
     ):
         if n_classes == 1:
             n_classes = 2
@@ -69,6 +71,8 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
             n_groups=n_groups,
             multires_aggregation=multires_aggregation,
             size=size,
+            gradient_clip_value=gradient_clip_value,
+            gradient_clip_algorithm=gradient_clip_algorithm,
         )
         assert len(size) == 2, "size must be a tuple of size 2"
 

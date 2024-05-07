@@ -725,7 +725,7 @@ class BaseMILModel_LNL(BaseModel):
         aux_lambda: float = 0.1,
         size: List[int] = None,
         n_resolutions: int = 1,
-        gradient_clip_value: float = 0.5,
+        gradient_clip_value: float = None,
         gradient_clip_algorithm: str = "norm",
     ):
         super(BaseMILModel_LNL, self).__init__(
@@ -861,16 +861,17 @@ class BaseMILModel_LNL(BaseModel):
         opt.optimizer.zero_grad()
         opt_aux.optimizer.zero_grad()
         self.manual_backward(loss)
-        self.clip_gradients(
-            opt,
-            gradient_clip_val=self.gradient_clip_value,
-            gradient_clip_algorithm=self.gradient_clip_algorithm,
-        )
-        self.clip_gradients(
-            opt_aux,
-            gradient_clip_val=self.gradient_clip_value,
-            gradient_clip_algorithm=self.gradient_clip_algorithm,
-        )
+        if self.gradient_clip_value is not None:
+            self.clip_gradients(
+                opt,
+                gradient_clip_val=self.gradient_clip_value,
+                gradient_clip_algorithm=self.gradient_clip_algorithm,
+            )
+            self.clip_gradients(
+                opt_aux,
+                gradient_clip_val=self.gradient_clip_value,
+                gradient_clip_algorithm=self.gradient_clip_algorithm,
+            )
         opt.step()
         opt_aux.step()
 
@@ -882,11 +883,12 @@ class BaseMILModel_LNL(BaseModel):
         # opt.optimizer.zero_grad()
         opt_aux.optimizer.zero_grad()
         self.manual_backward(aux_mi_loss)
-        self.clip_gradients(
-            opt_aux,
-            gradient_clip_val=self.gradient_clip_value,
-            gradient_clip_algorithm=self.gradient_clip_algorithm,
-        )
+        if self.gradient_clip_value is not None:
+            self.clip_gradients(
+                opt_aux,
+                gradient_clip_val=self.gradient_clip_value,
+                gradient_clip_algorithm=self.gradient_clip_algorithm,
+            )
         # opt.step()
         opt_aux.step()
 

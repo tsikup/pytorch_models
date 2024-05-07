@@ -173,6 +173,8 @@ class MINet_LNL_PL(BaseMILModel_LNL):
         dropout: bool = True,
         pooling_mode="max",
         multires_aggregation: Union[None, str] = None,
+        gradient_clip_value: float = 0.5,
+        gradient_clip_algorithm: str = "norm",
     ):
         if n_classes == 2:
             n_classes = 1
@@ -184,6 +186,8 @@ class MINet_LNL_PL(BaseMILModel_LNL):
             n_groups=n_groups,
             multires_aggregation=multires_aggregation,
             size=size,
+            gradient_clip_value=gradient_clip_value,
+            gradient_clip_algorithm=gradient_clip_algorithm,
         )
         self.n_groups = n_groups
         if self.n_classes > 2:
