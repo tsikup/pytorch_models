@@ -312,6 +312,8 @@ class MMIL_PL(BaseMILModel):
         # Prediction
         logits = self._forward(features, coords)
         preds = F.softmax(logits, dim=1)
+        if self.n_classes == 2:
+            preds = preds[:, 1].unsqueeze(dim=1)
 
         loss = None
         if not is_predict:

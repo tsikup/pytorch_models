@@ -136,6 +136,8 @@ class MMIL_LNL_PL(BaseMILModel_LNL):
 
         # Sigmoid or Softmax activation
         preds = torch.nn.functional.softmax(logits, dim=1)
+        if self.n_classes == 2:
+            preds = preds[:, 1].unsqueeze(dim=1)
         return {
             "target": target,
             "preds": preds,
