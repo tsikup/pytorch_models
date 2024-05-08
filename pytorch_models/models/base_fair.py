@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Union, Dict
 
 import numpy as np
 import torch
@@ -572,8 +572,17 @@ class BaseMILModel_GroupDRO(BaseMILModel):
         gamma: float = 0.1,
         generalization_adjustment: str = "0",
         is_robust: bool = True,
+        multires_aggregation: Union[Dict[str, str], str, None] = None,
+        size: List[int] = None,
+        n_resolutions: int = 1,
     ):
-        super(BaseMILModel_GroupDRO, self).__init__(config, n_classes=n_classes)
+        super(BaseMILModel_GroupDRO, self).__init__(
+            config,
+            n_classes=n_classes,
+            multires_aggregation=multires_aggregation,
+            size=size,
+            n_resolutions=n_resolutions,
+        )
 
         adjustments = [float(c) for c in generalization_adjustment.split(",")]
         assert len(adjustments) in (1, n_groups)
