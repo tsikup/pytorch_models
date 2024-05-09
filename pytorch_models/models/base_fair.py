@@ -23,23 +23,34 @@ class BaseMILModel_LAFTR(BaseMILModel):
         n_classes: int,
         n_groups: int,
         hidden_size: int,
+        size: List[int],
+        multires_aggregation: str,
+        n_resolutions: int = 1,
         adversary_size: int = 32,
         model_var="eqodd",
+        aud_steps: int = 1,
         class_coeff: float = 1.0,
         fair_coeff: float = 1.0,
         SensWeights=None,  # dataset.get_label_distribution("labels_group")
         LabelSensWeights=None,  # dataset.get_label_distribution(["labels", "labels_group"]).to_numpy().reshape(self.n_classes, self.n_groups)
     ):
-        super(BaseMILModel_LAFTR, self).__init__(config, n_classes=n_classes)
+        super(BaseMILModel_LAFTR, self).__init__(
+            config,
+            n_classes=n_classes,
+            multires_aggregation=multires_aggregation,
+            size=size,
+            n_resolutions=n_resolutions,
+        )
         self.adversary_size = adversary_size
-        self.used_classes = n_groups
-        assert n_groups == 2, "Only two groups supported."
+        self.n_groups = n_groups
+        assert n_groups == 1, "Only two groups supported. (binary)"
         assert model_var in [
             "dp",
             "eqodd",
             "eqopp0",
             "eqopp1",
         ], "Model variant not supported."
+        self.aud_steps = aud_steps
         self.model_var = model_var
         self.class_coeff = class_coeff
         self.fair_coeff = fair_coeff
@@ -47,29 +58,19 @@ class BaseMILModel_LAFTR(BaseMILModel):
         self.YA_weights = LabelSensWeights
         self.hidden_size = hidden_size
 
-        if isinstance(hidden_size, list):
-            self.discriminator = [
-                self._build_discriminator(_hidden_size, adversary_size)
-                for _hidden_size in hidden_size
-            ]
-        else:
-            self.discriminator = self._build_discriminator(hidden_size, adversary_size)
+        self.discriminator = self._build_discriminator(hidden_size, adversary_size)
 
     def _build_discriminator(self, hidden_size, adversary_size):
         if self.model_var != "laftr-dp":
-            adv_neurons = (
-                [hidden_size + self.used_classes - 1]
-                + [adversary_size]
-                + [self.used_classes - 1]
-            )
+            adv_neurons = [hidden_size + self.n_groups, adversary_size, self.n_groups]
         else:
-            adv_neurons = [hidden_size] + [adversary_size] + [self.used_classes - 1]
+            adv_neurons = [hidden_size, adversary_size, self.n_groups]
 
         num_adversaries_layers = len(adv_neurons)
         # Conditional adversaries for sensitive attribute classification, one separate adversarial classifier for
         # one class label.
-        return nn.ModuleList(
-            [
+        return nn.Sequential(
+            *[
                 nn.Linear(adv_neurons[i], adv_neurons[i + 1])
                 for i in range(num_adversaries_layers - 1)
             ]
@@ -86,6 +87,8 @@ class BaseMILModel_LAFTR(BaseMILModel):
         logits, logits_adv = self._forward(features, target)
         # Loss (on logits)
         loss = None
+        class_loss = None
+        weighted_aud_loss = None
         if not is_predict:
             class_loss = self.class_coeff * self.loss(
                 logits, target.float() if logits.shape[1] == 1 else target.squeeze()
@@ -110,6 +113,8 @@ class BaseMILModel_LAFTR(BaseMILModel):
             "target": target,
             "preds": preds,
             "loss": loss,
+            "main_loss": class_loss,
+            "weighted_aud_loss": weighted_aud_loss,
             "slide_name": batch["slide_name"],
         }
 
@@ -127,24 +132,20 @@ class BaseMILModel_LAFTR(BaseMILModel):
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
             _logits, _features = self.model.forward(h, return_features=True)
-            if not isinstance(self.hidden_size, list):
-                _features = [_features]
             logits.append(_logits)
             if target is not None:
                 _logits_d = []
-                for idx, _f in enumerate(_features):
-                    if self.model_var != "laftr-dp":
-                        _f = torch.cat(
-                            [
-                                _f,
-                                torch.unsqueeze(target[idx].float(), 1).to(self.device),
-                            ],
-                            axis=1,
-                        )
-                    for hidden in self.discriminator[idx]:
-                        _f = hidden(_f)
-                    # For discriminator loss
-                    _logits_d.append(torch.squeeze(_f, dim=1))
+                if self.model_var != "laftr-dp":
+                    _f = torch.cat(
+                        [
+                            _features,
+                            target[idx].float().view(-1, 1).to(self.device),
+                        ],
+                        axis=1,
+                    )
+                _f = self.discriminator(_f)
+                # For discriminator loss
+                _logits_d.append(torch.squeeze(_f, dim=1))
                 logits_adv.append(torch.mean(torch.stack(_logits_d)))
         if target is not None:
             return (
@@ -192,6 +193,144 @@ class BaseMILModel_LAFTR(BaseMILModel):
             raise Exception("Wrong model name")
             exit(0)
         return wtd_L
+
+    def configure_optimizers(self):
+        optimizer_main = self._get_optimizer(self.model.parameters())
+        optimizer_disc = self._get_optimizer(self.discriminator.parameters())
+
+        if self.config.trainer.lr_scheduler is not None:
+            scheduler_main = self._get_scheduler(optimizer_main)
+            scheduler_disc = self._get_scheduler(optimizer_disc)
+            return [optimizer_main, optimizer_disc], [scheduler_main, scheduler_disc]
+        else:
+            return optimizer_main, optimizer_disc
+
+    def training_step(self, batch, batch_idx):
+        optimizers = self.optimizers()
+        opt = optimizers[0]
+        opt_disc = optimizers[1]
+
+        # ******************************** #
+        # Main task + Adversarial AUX task #
+        # ******************************** #
+        output = self.forward(batch)
+        target, preds, loss, main_loss, weighted_aud_loss = (
+            output["target"],
+            output["preds"],
+            output["loss"],
+            output["main_loss"],
+            output["weighted_aud_loss"],
+        )
+
+        opt.optimizer.zero_grad()
+        opt_disc.optimizer.zero_grad()
+
+        self.manual_backward(loss, retain_graph=True)
+        if self.gradient_clip_value is not None:
+            self.clip_gradients(
+                opt,
+                gradient_clip_val=self.gradient_clip_value,
+                gradient_clip_algorithm=self.gradient_clip_algorithm,
+            )
+
+        for i in range(self.aud_steps):
+            if i != self.aud_steps - 1:
+                self.manual_backward(loss, retain_graph=True)
+            else:
+                self.manual_backward(loss)
+            if self.gradient_clip_value is not None:
+                self.clip_gradients(
+                    opt_disc,
+                    gradient_clip_val=self.gradient_clip_value,
+                    gradient_clip_algorithm=self.gradient_clip_algorithm,
+                )
+            opt_disc.step()
+        opt.step()
+
+        lr_schedulers = self.lr_schedulers()
+        sch = lr_schedulers[0]
+        sch_adv = lr_schedulers[1]
+        sch.step()
+        sch_adv.step()
+
+        self._log_metrics(
+            preds,
+            target,
+            dict(
+                loss=loss,
+                main_loss=main_loss,
+                weighted_aud_loss=weighted_aud_loss,
+            ),
+            "train",
+        )
+        return {
+            "loss": loss,
+            "main_loss": main_loss,
+            "weighted_aud_loss": weighted_aud_loss,
+            "preds": preds,
+            "target": target,
+        }
+
+    def validation_step(self, batch, batch_idx):
+        output = self.forward(batch)
+        target, preds, loss, main_loss, weighted_aud_loss = (
+            output["target"],
+            output["preds"],
+            output["loss"],
+            output["main_loss"],
+            output["weighted_aud_loss"],
+        )
+
+        self._log_metrics(
+            preds,
+            target,
+            dict(
+                loss=loss,
+                main_loss=main_loss,
+                weighted_aud_loss=weighted_aud_loss,
+            ),
+            "val",
+        )
+        return {
+            "val_loss": loss,
+            "val_main_loss": main_loss,
+            "weighted_aud_loss": weighted_aud_loss,
+            "val_preds": preds,
+            "val_target": target,
+        }
+
+    def test_step(self, batch, batch_idx):
+        output = self.forward(batch)
+        target, preds, loss, main_loss, weighted_aud_loss = (
+            output["target"],
+            output["preds"],
+            output["loss"],
+            output["main_loss"],
+            output["weighted_aud_loss"],
+        )
+
+        self._log_metrics(
+            preds,
+            target,
+            dict(
+                loss=loss,
+                main_loss=main_loss,
+                weighted_aud_loss=weighted_aud_loss,
+            ),
+            "test",
+        )
+
+        return {
+            "test_loss": loss,
+            "test_main_loss": main_loss,
+            "weighted_aud_loss": weighted_aud_loss,
+            "test_preds": preds,
+            "test_target": target,
+        }
+
+    def predict_step(self, batch, batch_idx):
+        output = self.forward(batch, is_predict=True)
+        return output["preds"], batch["labels"], batch["slide_name"]
 
 
 class BaseMILModel_EnD(BaseMILModel):
