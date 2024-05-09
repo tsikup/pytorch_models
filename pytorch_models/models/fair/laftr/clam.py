@@ -135,8 +135,10 @@ class CLAM_LAFTR_PL(BaseMILModel_LAFTR):
         return {
             "target": target,
             "preds": preds,
-            "loss": loss,
             "attention": A,
+            "loss": loss,
+            "main_loss": class_loss,
+            "weighted_aud_loss": weighted_aud_loss,
             "slide_name": batch["slide_name"],
         }
 

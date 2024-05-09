@@ -63,17 +63,21 @@ class BaseMILModel_LAFTR(BaseMILModel):
         self.gradient_clip_value = gradient_clip_value
 
         self.discriminator = self._build_discriminator(hidden_size, adversary_size)
+        
+        self.automatic_optimization = False
 
     def _build_discriminator(self, hidden_size, adversary_size):
         if not isinstance(hidden_size, list):
             hidden_size = [hidden_size]
         elif isinstance(hidden_size, tuple):
             hidden_size = list(hidden_size)
+        hidden_size = np.array(hidden_size).flatten().tolist()
 
         if self.model_var != "laftr-dp":
-            adv_neurons = [*hidden_size + self.n_groups, adversary_size, self.n_groups]
+            hidden_size[0] = hidden_size[0] + self.n_groups
+            adv_neurons = hidden_size + [adversary_size, self.n_groups]
         else:
-            adv_neurons = [*hidden_size, adversary_size, self.n_groups]
+            adv_neurons = hidden_size + [adversary_size, self.n_groups]
 
         num_adversaries_layers = len(adv_neurons)
         # Conditional adversaries for sensitive attribute classification, one separate adversarial classifier for
@@ -171,12 +175,17 @@ class BaseMILModel_LAFTR(BaseMILModel):
 
     def get_weighted_aud_loss(self, L, Y, A, A_wts, YA_wts):
         """Returns weighted discriminator loss"""
-        Y = Y[:, 0]
+        assert len(Y.shape) == 1 or Y.shape[1] == 1
+        Y = Y.view(-1)
+        
+        assert len(A.shape) == 1 or A.shape[1] == 1
+        A = A.view(-1)
+        
         if self.model_var == "dp":
             A0_wt = A_wts[0]
             A1_wt = A_wts[1]
             wts = A0_wt * (1 - A) + A1_wt * A
-            wtd_L = L * torch.squeeze(wts)
+            wtd_L = L * torch.squeeze(wts.view(-1, 1))
         elif (
             self.model_var == "eqodd"
             or self.model_var == "eqopp0"
@@ -197,10 +206,9 @@ class BaseMILModel_LAFTR(BaseMILModel):
                 wts = Y0_A0_wt * (1 - A) * (1 - Y) + Y0_A1_wt * A * (1 - Y)
             elif self.model_var == "eqopp1":
                 wts = Y1_A0_wt * (1 - A) * Y + Y1_A1_wt * A * Y
-            wtd_L = L * torch.squeeze(wts)
+            wtd_L = L * torch.squeeze(wts.view(-1, 1))
         else:
             raise Exception("Wrong model name")
-            exit(0)
         return wtd_L
 
     def configure_optimizers(self):
