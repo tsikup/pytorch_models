@@ -65,10 +65,15 @@ class BaseMILModel_LAFTR(BaseMILModel):
         self.discriminator = self._build_discriminator(hidden_size, adversary_size)
 
     def _build_discriminator(self, hidden_size, adversary_size):
+        if not isinstance(hidden_size, list):
+            hidden_size = [hidden_size]
+        elif isinstance(hidden_size, tuple):
+            hidden_size = list(hidden_size)
+
         if self.model_var != "laftr-dp":
-            adv_neurons = [hidden_size + self.n_groups, adversary_size, self.n_groups]
+            adv_neurons = [*hidden_size + self.n_groups, adversary_size, self.n_groups]
         else:
-            adv_neurons = [hidden_size, adversary_size, self.n_groups]
+            adv_neurons = [*hidden_size, adversary_size, self.n_groups]
 
         num_adversaries_layers = len(adv_neurons)
         # Conditional adversaries for sensitive attribute classification, one separate adversarial classifier for

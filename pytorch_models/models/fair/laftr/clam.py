@@ -84,7 +84,7 @@ class CLAM_LAFTR_PL(BaseMILModel_LAFTR):
         else:
             raise NotImplementedError
 
-        self.hidden_size = self.model.classifier_size[self.classifier_depth]
+        self.hidden_size = self.model.classifier_size
         self.discriminator = self._build_discriminator(
             self.hidden_size, self.adversary_size
         )
