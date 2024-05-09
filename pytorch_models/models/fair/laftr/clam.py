@@ -32,6 +32,8 @@ class CLAM_LAFTR_PL(BaseMILModel_LAFTR):
         aud_steps: int = 1,
         class_coeff: float = 1.0,
         fair_coeff: float = 1.0,
+        gradient_clip_value: float = 0.5,
+        gradient_clip_algorithm: str = "norm",
     ):
         super(CLAM_LAFTR_PL, self).__init__(
             config,
@@ -48,6 +50,8 @@ class CLAM_LAFTR_PL(BaseMILModel_LAFTR):
             fair_coeff=fair_coeff,
             SensWeights=SensWeights,
             LabelSensWeights=LabelSensWeights,
+            gradient_clip_value=gradient_clip_value,
+            gradient_clip_algorithm=gradient_clip_algorithm,
         )
 
         self.size = size

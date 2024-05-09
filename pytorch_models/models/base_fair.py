@@ -33,6 +33,8 @@ class BaseMILModel_LAFTR(BaseMILModel):
         fair_coeff: float = 1.0,
         SensWeights=None,  # dataset.get_label_distribution("labels_group")
         LabelSensWeights=None,  # dataset.get_label_distribution(["labels", "labels_group"]).to_numpy().reshape(self.n_classes, self.n_groups)
+        gradient_clip_value: float = 0.5,
+        gradient_clip_algorithm: str = "norm",
     ):
         super(BaseMILModel_LAFTR, self).__init__(
             config,
