@@ -59,6 +59,8 @@ class BaseMILModel_LAFTR(BaseMILModel):
         self.A_weights = SensWeights
         self.YA_weights = LabelSensWeights
         self.hidden_size = hidden_size
+        self.gradient_clip_algorithm = gradient_clip_algorithm
+        self.gradient_clip_value = gradient_clip_value
 
         self.discriminator = self._build_discriminator(hidden_size, adversary_size)
 
