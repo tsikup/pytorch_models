@@ -105,6 +105,8 @@ class CLAM_LAFTR_PL(BaseMILModel_LAFTR):
         )
 
         loss = None
+        class_loss = None
+        weighted_aud_loss = None
         if not is_predict:
             # Loss (on logits)
             class_loss = self.class_coeff * self.loss(
