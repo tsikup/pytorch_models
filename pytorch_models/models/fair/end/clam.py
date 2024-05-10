@@ -150,7 +150,7 @@ class CLAM_EnD_PL(BaseMILModel_EnD):
             logits.append(_logits)
             preds.append(_preds)
             A.append(_A)
-            features.append(results_dict["features"])
+            features.append(_results_dict["features"])
             results_dict.append(_results_dict)
 
         return (
