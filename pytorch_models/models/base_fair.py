@@ -894,6 +894,21 @@ class BaseMILModel_DomainIndependent(BaseMILModel):
             "loss": loss,
             "slide_name": batch["slide_name"],
         }
+        
+    def _compute_metrics(self, preds, target, mode):
+        if mode == "val":
+            metrics = self.val_metrics
+        elif mode == "train":
+            metrics = self.train_metrics
+        elif mode in ["eval", "test"]:
+            metrics = self.test_metrics
+        if self.class_num in [1, 2]:
+            if len(preds.shape) == 2 and preds.shape[1] > 1:
+                preds = preds[:, 1]
+            metrics(preds.view(-1), target.view(-1))
+        else:
+            metrics(preds, target.view(-1))
+            # metrics(preds, self._one_hot_target(preds, target))
 
 
 class BaseMILModel_LNL(BaseModel):

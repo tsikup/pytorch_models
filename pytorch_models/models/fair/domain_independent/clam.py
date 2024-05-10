@@ -95,7 +95,7 @@ class CLAM_DomainIndependent_PL(BaseMILModel_DomainIndependent):
                 ) * loss + self.instance_loss_weight * instance_loss
 
         preds = self._inference(logits)
-        if self.n_classes in [1, 2]:
+        if self.class_num in [1, 2]:
             preds = preds[:, 1]
             preds = torch.unsqueeze(preds, dim=1)
 
