@@ -174,10 +174,10 @@ class BaseMILModel_LAFTR(BaseMILModel):
         """Returns weighted discriminator loss"""
         assert len(Y.shape) == 1 or Y.shape[1] == 1
         Y = Y.view(-1)
-        
+
         assert len(A.shape) == 1 or A.shape[1] == 1
         A = A.view(-1)
-        
+
         if self.model_var == "dp":
             A0_wt = A_wts[0]
             A1_wt = A_wts[1]
@@ -354,8 +354,17 @@ class BaseMILModel_EnD(BaseMILModel):
         n_classes: int,
         alpha: float = 1.0,
         beta: float = 1.0,
+        multires_aggregation: Union[Dict[str, str], str, None] = None,
+        size: List[int] = None,
+        n_resolutions: int = 1,
     ):
-        super(BaseMILModel_EnD, self).__init__(config, n_classes=n_classes)
+        super(BaseMILModel_EnD, self).__init__(
+            config,
+            n_classes=n_classes,
+            multires_aggregation=multires_aggregation,
+            size=size,
+            n_resolutions=n_resolutions,
+        )
         self.alpha = alpha
         self.beta = beta
 
@@ -372,15 +381,14 @@ class BaseMILModel_EnD(BaseMILModel):
         loss = None
         if not is_predict:
             loss = 0
-            bce_loss = self.loss(
+            ce_loss = self.loss(
                 logits, target.float() if logits.shape[1] == 1 else target.squeeze()
             )
-            for _f in _features:
-                abs_loss = self.abs_regu(
-                    _f, target, sensitive_attr, self.alpha, self.beta
-                )
-                loss += abs_loss
-            loss += bce_loss
+            loss += ce_loss
+            abs_loss = self.abs_regu(
+                _features, target, sensitive_attr, self.alpha, self.beta
+            )
+            loss += abs_loss
         # Sigmoid or Softmax activation
         if self.n_classes == 1:
             preds = logits.sigmoid()
