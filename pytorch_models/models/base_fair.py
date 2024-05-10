@@ -1,19 +1,18 @@
-from typing import List, Union, Dict
+from typing import Dict, List, Union
 
 import numpy as np
 import torch
 from dotmap import DotMap
-from torch import nn
-
 from pytorch_models.losses.gce import EMA, GeneralizedCELoss
 from pytorch_models.losses.losses import get_loss
 from pytorch_models.models.base import BaseMILModel, BaseModel
 from pytorch_models.models.fair.group_dro.loss import GroupDROLoss
 from pytorch_models.models.utils import (
-    LinearWeightedTransformationSum,
     LinearWeightedSum,
+    LinearWeightedTransformationSum,
 )
 from pytorch_models.utils.tensor import aggregate_features
+from torch import nn
 
 
 class BaseMILModel_LAFTR(BaseMILModel):
@@ -63,8 +62,6 @@ class BaseMILModel_LAFTR(BaseMILModel):
         self.gradient_clip_value = gradient_clip_value
 
         self.discriminator = self._build_discriminator(hidden_size, adversary_size)
-        
-        self.automatic_optimization = False
 
     def _build_discriminator(self, hidden_size, adversary_size):
         if not isinstance(hidden_size, list):
@@ -739,11 +736,12 @@ class BaseMILModel_GroupDRO(BaseMILModel):
             size=size,
             n_resolutions=n_resolutions,
         )
+        self.n_groups = n_groups
 
         adjustments = [float(c) for c in generalization_adjustment.split(",")]
-        assert len(adjustments) in (1, n_groups)
+        assert len(adjustments) in (1, self.n_groups)
         if len(adjustments) == 1:
-            adjustments = np.array(adjustments * n_groups)
+            adjustments = np.array(adjustments * self.n_groups)
         else:
             adjustments = np.array(adjustments)
 
@@ -760,7 +758,7 @@ class BaseMILModel_GroupDRO(BaseMILModel):
         self.dro_loss = GroupDROLoss(
             criterion=self.loss,
             is_robust=is_robust,
-            n_groups=n_groups,
+            n_groups=self.n_groups,
             group_counts=np.array(group_counts),
             alpha=alpha,
             gamma=gamma,
@@ -804,58 +802,77 @@ class BaseMILModel_DomainIndependent(BaseMILModel):
         n_classes: int,
         n_groups: int,
         fairness_mode: str,
+        multires_aggregation: Union[Dict[str, str], str, None] = None,
+        size: List[int] = None,
+        n_resolutions: int = 1,
     ):
         super(BaseMILModel_DomainIndependent, self).__init__(
-            config, n_classes=n_classes
+            config,
+            n_classes=n_classes,
+            multires_aggregation=multires_aggregation,
+            size=size,
+            n_resolutions=n_resolutions,
         )
-        # TODO: Log change of n_classes and n_groups
-        if self.n_classes == 1:
-            self.n_classes = 2
         self.n_groups = n_groups
-        if self.n_groups == 1:
-            self.n_groups = 2
         self.n_classes = self.n_classes * self.n_groups
         self.fairness_mode = fairness_mode
         assert self.fairness_mode in [
             "domain_independent",
             "domain_discriminative",
         ], "Fairness mode must be either 'domain_independent' or 'domain_discriminative'."
-        assert isinstance(
-            self.loss, torch.nn.CrossEntropyLoss
-        ), "Only CE loss supported for DomainIndependent or DomainDiscriminative training."
+        assert (
+            self.fairness_mode == "domain_independent"
+        ), "domain_discriminative is not supported yet."
+
+    @property
+    def class_num(self):
+        if self.n_groups == 1:
+            class_num = self.n_classes - 1
+        else:
+            class_num = self.n_classes // self.n_groups
+        return class_num
 
     def _criterion(self, logits, target, sensitive_attr):
         domain_label = sensitive_attr.squeeze()
-        class_num = self.n_classes // self.n_groups
         if self.fairness_mode == "domain_independent":
             _logits = []
             for idx in range(logits.shape[0]):
                 _logits.append(
                     logits[
                         idx,
-                        class_num
-                        * domain_label[idx] : class_num
+                        self.class_num
+                        * domain_label[idx] : self.class_num
                         * (domain_label[idx] + 1),
                     ]
                 )
             _logits = torch.vstack(_logits).to(logits.device)
             return self.loss.forward(_logits, target.squeeze())
         elif self.fairness_mode == "domain_discriminative":
-            nd_way_target = torch.zeros_like(logits)
-            nd_way_target[
-                :, class_num * domain_label : class_num * (domain_label + 1)
-            ] = 1
-            nd_way_target = nd_way_target.reshape(class_num, self.n_groups)
-            nd_way_target = nd_way_target * target
-            nd_way_target = nd_way_target.reshape(-1)
-            return self.loss.forward(logits, nd_way_target.float())
+            raise NotImplementedError
+            # nd_way_target = torch.zeros_like(logits)
+            # nd_way_target[
+            #     :, class_num * domain_label : class_num * (domain_label + 1)
+            # ] = 1
+            # nd_way_target = nd_way_target.reshape(-1, class_num, self.n_groups)
+            # nd_way_target = nd_way_target * target
+            # nd_way_target = nd_way_target.reshape(-1)
+            # return self.loss.forward(logits, nd_way_target.float())
+
+    def _inference_sum_prob(self, logits):
+        """Inference method: sum the probability from multiple domains"""
+        logits = logits.reshape(-1, self.n_groups, self.class_num)
+        logits = logits.sum(dim=1)
+        predict_prob = (
+            torch.nn.functional.softmax(logits, dim=1)
+            if logits.shape[1] > 1
+            else logits.sigmoid()
+        )
+        return predict_prob
 
     def _inference(self, logits):
-        class_num = self.n_classes // self.n_groups
-        preds = torch.nn.functional.softmax(logits, dim=1)
-        preds = preds.reshape(-1, self.n_groups, class_num)
-        preds = preds.sum(dim=1)
-        return preds
+        # TODO: Implement more inference methods
+        # https://github.com/princetonvisualai/DomainBiasMitigation/blob/master/models/celeba_domain_independent.py
+        return self._inference_sum_prob(logits)
 
     def forward(self, batch, is_predict=False):
         # Batch
@@ -870,7 +887,6 @@ class BaseMILModel_DomainIndependent(BaseMILModel):
         loss = None
         if not is_predict:
             loss = self._criterion(logits, target, sensitive_attr)
-        # Sigmoid or Softmax activation
         preds = self._inference(logits)
         return {
             "target": target,
