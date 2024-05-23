@@ -43,6 +43,7 @@ class BaseMILModel_LAFTR(BaseMILModel):
             size=size,
             n_resolutions=n_resolutions,
         )
+        self.automatic_optimization = False
         self.adversary_size = adversary_size
         self.n_groups = n_groups
         assert n_groups == 1, "Only two groups supported. (binary)"
