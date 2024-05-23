@@ -59,6 +59,9 @@ class MINET_LAFTR_PL(BaseMILModel_LAFTR):
             return_features=False,
             return_preds=False,
         )
+        
+        if self.model_var != "laftr-dp":
+            size[0] += 1
 
         self.discriminator = get_minet_model(
             config,
@@ -82,15 +85,13 @@ class MINET_LAFTR_PL(BaseMILModel_LAFTR):
                 )
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
-            _logits = self.model.forward(h)
-            logits.append(_logits)
+            logits.append(self.model.forward(h))
             if target is not None:
-                _logits_d = []
                 if self.model_var != "laftr-dp":
                     h = torch.cat(
                         [
                             h,
-                            target[idx].float().view(-1, 1).to(self.device),
+                            target[idx].float().view(-1, 1).repeat(h.shape[0], 1).to(self.device),
                         ],
                         axis=1,
                     )
