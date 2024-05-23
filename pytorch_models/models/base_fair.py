@@ -62,11 +62,12 @@ class BaseMILModel_LAFTR(BaseMILModel):
         self.gradient_clip_algorithm = gradient_clip_algorithm
         self.gradient_clip_value = gradient_clip_value
 
-        if hidden_size is not None:
+        if hidden_size is not None and adversary_size is not None:
             self.discriminator = self._build_discriminator(hidden_size, adversary_size)
         else:
             warnings.warn(
-                "Hidden size not provided. Discriminator is not built. You should build it manually."
+                "Hidden size or adversary size is not provided."
+                "Discriminator is not built. You should build it manually."
             )
 
     def _build_discriminator(self, hidden_size, adversary_size):
