@@ -1,16 +1,8 @@
 from typing import Dict, List, Tuple, Union
 
-import torch
 from dotmap import DotMap
 from pytorch_models.models.base import BaseMILSurvModel
-from pytorch_models.models.classification.minet import (
-    MI_Net_DS,
-    mi_NET,
-    MI_Net,
-    MI_Net_RC,
-    get_minet_model,
-)
-from pytorch_models.utils.tensor import aggregate_features
+from pytorch_models.models.classification.minet import get_minet_model
 
 
 class MINet_PL_Surv(BaseMILSurvModel):

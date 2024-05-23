@@ -1,3 +1,4 @@
+import warnings
 from typing import Dict, List, Union
 
 import numpy as np
@@ -61,7 +62,12 @@ class BaseMILModel_LAFTR(BaseMILModel):
         self.gradient_clip_algorithm = gradient_clip_algorithm
         self.gradient_clip_value = gradient_clip_value
 
-        self.discriminator = self._build_discriminator(hidden_size, adversary_size)
+        if hidden_size is not None:
+            self.discriminator = self._build_discriminator(hidden_size, adversary_size)
+        else:
+            warnings.warn(
+                "Hidden size not provided. Discriminator is not built. You should build it manually."
+            )
 
     def _build_discriminator(self, hidden_size, adversary_size):
         if not isinstance(hidden_size, list):
@@ -153,10 +159,7 @@ class BaseMILModel_LAFTR(BaseMILModel):
                         ],
                         axis=1,
                     )
-                _f = self.discriminator(_f)
-                # For discriminator loss
-                _logits_d.append(torch.squeeze(_f, dim=1))
-                logits_adv.append(torch.mean(torch.stack(_logits_d)))
+                logits_adv.append(torch.squeeze(self.discriminator(_f), dim=1))
         if target is not None:
             return (
                 torch.vstack(logits),
@@ -902,7 +905,7 @@ class BaseMILModel_DomainIndependent(BaseMILModel):
             "loss": loss,
             "slide_name": batch["slide_name"],
         }
-        
+
     def _compute_metrics(self, preds, target, mode):
         if mode == "val":
             metrics = self.val_metrics
