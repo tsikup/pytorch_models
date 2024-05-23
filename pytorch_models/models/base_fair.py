@@ -149,14 +149,14 @@ class BaseMILModel_LAFTR(BaseMILModel):
                 )
             if len(h.shape) == 3:
                 h = h.squeeze(dim=0)
-            _logits, _features = self.model.forward(h, return_features=True)
+            _logits, _f = self.model.forward(h, return_features=True)
             logits.append(_logits)
             if target is not None:
                 _logits_d = []
                 if self.model_var != "laftr-dp":
                     _f = torch.cat(
                         [
-                            _features,
+                            _f,
                             target[idx].float().view(-1, 1).to(self.device),
                         ],
                         axis=1,
