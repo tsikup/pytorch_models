@@ -11,7 +11,7 @@ from timm.data.transforms_factory import create_transform
 
 
 class VirchowModel(torch.nn.Module):
-    def __init__(self, ckpt_dir):
+    def __init__(self):
         super(VirchowModel, self).__init__()
         # need to specify MLP layer and activation function for proper init
         self.model = timm.create_model(
