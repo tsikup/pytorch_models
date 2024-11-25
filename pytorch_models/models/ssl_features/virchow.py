@@ -27,7 +27,7 @@ class VirchowModel(torch.nn.Module):
         )
         return transforms
 
-    def forward(self, x):
+    def forward(self, x, with_class_token=False):
         output = self.model(x)  # size: 1 x 261 x 1280
 
         class_token = output[:, 0]  # size: 1 x 1280
@@ -35,10 +35,14 @@ class VirchowModel(torch.nn.Module):
             :, 5:
         ]  # size: 1 x 256 x 1280, tokens 1-4 are register tokens so we ignore those
 
-        # concatenate class token and average pool of patch tokens
-        embedding = torch.cat(
-            [class_token, patch_tokens.mean(1)], dim=-1
-        )  # size: 1 x 2560
+        if with_class_token:
+            # concatenate class token and average pool of patch tokens
+            embedding = torch.cat(
+                [class_token, patch_tokens.mean(1)], dim=-1
+            )  # size: 1 x 2560
+        else:
+            embedding = patch_tokens.mean(1)
+
         return embedding
 
 
