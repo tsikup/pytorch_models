@@ -2,19 +2,25 @@
 https://huggingface.co/prov-gigapath/prov-gigapath
 """
 
-import torch
 import timm
+import torch
+
+# import gigapath
 from torchvision import transforms
 
 
 class GigaPath(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, slide_level=False):
         super(GigaPath, self).__init__()
-        # need to specify MLP layer and activation function for proper init
 
         self.model = timm.create_model(
             "hf_hub:prov-gigapath/prov-gigapath", pretrained=True
         )
+
+        # if slide_level:
+        #     self.slide_encoder = gigapath.slide_encoder.create_model(
+        #         "hf_hub:prov-gigapath/prov-gigapath", "gigapath_slide_enc12l768d", 1536
+        #     )
 
     def get_transforms(self):
         transform = transforms.Compose(
@@ -34,6 +40,11 @@ class GigaPath(torch.nn.Module):
     def forward(self, x):
         embedding = self.model(x).squeeze()
         return embedding
+
+    # def slide_representation(self, x, coords):
+    #     patch_embedding = self.forward(x)
+    #     embedding = self.slide_encoder(patch_embedding, coords).squeeze()
+    #     return embedding
 
 
 def gigapath():
