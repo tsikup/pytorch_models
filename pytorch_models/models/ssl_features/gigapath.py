@@ -7,9 +7,9 @@ import timm
 from torchvision import transforms
 
 
-class VirchowModel(torch.nn.Module):
+class GigaPath(torch.nn.Module):
     def __init__(self):
-        super(VirchowModel, self).__init__()
+        super(GigaPath, self).__init__()
         # need to specify MLP layer and activation function for proper init
 
         self.model = timm.create_model(
@@ -36,5 +36,5 @@ class VirchowModel(torch.nn.Module):
         return embedding
 
 
-def virchow():
-    return VirchowModel()
+def gigapath():
+    return GigaPath()
