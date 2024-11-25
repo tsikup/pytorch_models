@@ -1,8 +1,7 @@
 """
-https://github.com/owkin/HistoSSLscaling/tree/main
+https://huggingface.co/paige-ai/Virchow2
 """
 
-import os
 import torch
 import timm
 from timm.layers import SwiGLUPacked
