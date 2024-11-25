@@ -27,7 +27,7 @@ class VirchowModel(torch.nn.Module):
         )
         return transforms
 
-    def forward(self, x, with_class_token=False):
+    def forward(self, x, with_class_token=True):
         output = self.model(x)  # size: 1 x 261 x 1280
 
         class_token = output[:, 0]  # size: 1 x 1280
