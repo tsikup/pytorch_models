@@ -32,7 +32,7 @@ class UniModel(torch.nn.Module):
         self.model = timm.create_model(pretrained=False, **timm_kwargs)
         self.model.load_state_dict(
             torch.load(
-                os.path.join(ckpt_dir, "uni_v2_mahmood.bin"), map_location="gpu"
+                os.path.join(ckpt_dir, "uni_v2_mahmood.bin"), map_location="cpu"
             ),
             strict=True,
         )
