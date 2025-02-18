@@ -32,8 +32,7 @@ class UniModel(torch.nn.Module):
         )
 
     def forward(self, x):
-        outputs = self.model(x)
-        features = outputs.last_hidden_state[:, 0, :]  # (1, 1536) shape
+        features = self.model(x)
         return features
 
 
