@@ -2,18 +2,16 @@
 https://huggingface.co/MahmoodLab/UNI2-h
 """
 
-import os
 import torch
 import timm
 
 
 class UniModel(torch.nn.Module):
-    def __init__(self, ckpt_dir, v2=True):
+    def __init__(self, v2=True):
         super(UniModel, self).__init__()
         assert v2, "Only Uni-v2 is supported"
 
         timm_kwargs = {
-            "model_name": "vit_giant_patch14_224",
             "img_size": 224,
             "patch_size": 14,
             "depth": 24,
@@ -29,12 +27,8 @@ class UniModel(torch.nn.Module):
             "dynamic_img_size": True,
         }
 
-        self.model = timm.create_model(pretrained=False, **timm_kwargs)
-        self.model.load_state_dict(
-            torch.load(
-                os.path.join(ckpt_dir, "uni_v2_mahmood.bin"), map_location="cpu"
-            ),
-            strict=True,
+        self.model = timm.create_model(
+            "hf-hub:MahmoodLab/UNI2-h", pretrained=True, **timm_kwargs
         )
 
     def forward(self, x):
