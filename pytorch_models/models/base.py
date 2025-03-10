@@ -688,7 +688,10 @@ class BaseSurvModel(BaseModel):
         self.loss = None
         del self.loss
         self.loss_type = loss_type
+        self.loss_weights = config.trainer.multi_loss_weights
         self._define_loss(loss_type)
+        if isinstance(self.loss_type, list):
+            assert len(self.loss_type) == len(self.loss_weights)
 
         self.train_metrics = get_metrics(
             self.config,
@@ -745,44 +748,73 @@ class BaseSurvModel(BaseModel):
         ).clone(prefix="test_")
 
     def _define_loss(self, loss_type, alpha=0.5, sigma=1.0):
-        if loss_type == "cox_loss":
-            self._coxloss = CoxSurvLoss()
-        elif loss_type == "cox_loss__ce":
-            assert (
-                self.config.model.classifier == "clam"
-            ), "Implemented only for CLAM models for now.."
-            self._coxloss = CoxSurvLoss()
-            self._ce = torch.nn.BCEWithLogitsLoss()
-        elif loss_type.startswith("nll"):
-            self._nll_loss = NLLSurvLoss(type=loss_type)
-        elif loss_type == "deephit_single_loss":
-            self._deephistloss = MyDeepHitLoss(single=True, alpha=alpha, sigma=sigma)
-        elif loss_type == "deephit_loss":
-            self._deephistloss = MyDeepHitLoss(single=False, alpha=alpha, sigma=sigma)
+        if isinstance(loss_type, list):
+            for l in loss_type:
+                self._define_loss(l)
         else:
-            raise NotImplementedError
+            if loss_type == "cox_loss":
+                self._coxloss = CoxSurvLoss()
+            elif loss_type == "cox_loss__ce":
+                assert (
+                    self.config.model.classifier == "clam"
+                ), "Implemented only for CLAM models for now.."
+                self._coxloss = CoxSurvLoss()
+                # self._ce = torch.nn.BCEWithLogitsLoss()
+                self._ce = torch.nn.CrossEntropyLoss()
+            elif loss_type.startswith("nll"):
+                self._nll_loss = NLLSurvLoss(type=loss_type)
+            elif loss_type == "deephit_single_loss":
+                self._deephistloss = MyDeepHitLoss(
+                    single=True, alpha=alpha, sigma=sigma
+                )
+            elif loss_type == "deephit_loss":
+                self._deephistloss = MyDeepHitLoss(
+                    single=False, alpha=alpha, sigma=sigma
+                )
+            elif loss_type in ["bce", "binary_cross_entropy"]:
+                self._bce = torch.nn.BCEWithLogitsLoss()
+            elif loss_type in ["ce", "cross_entropy"]:
+                self._ce = torch.nn.CrossEntropyLoss()
+            else:
+                raise NotImplementedError
 
-    def compute_loss(self, survtime, event, logits, S):
-        if self.loss_type == "cox_loss":
-            return self._coxloss(logits=logits, survtimes=survtime, events=event)
-        elif self.loss_type == "cox_loss__ce":
-            assert (isinstance(logits, list) or isinstance(logits, tuple)) and len(
-                logits
-            ) == 2
-            return self._coxloss(
-                logits=logits[0], survtimes=survtime, events=event
-            ) + self._ce(logits[1], event.float())
-        elif self.loss_type in [
-            "nll_loss",
-            "nll_logistic_hazard_loss",
-            "nll_pmf_loss",
-            "nll_pc_hazard_loss",
-        ]:
-            return self._nll_loss(logits=logits, S=S, Y=survtime, c=1 - event)
-        elif self.loss_type in ["deephit_loss", "deephit_single_loss"]:
-            return self._deephistloss(survtimes=survtime, events=event, logits=logits)
+    def compute_loss(self, survtime, event, logits, S, loss_type=None):
+        if isinstance(self.loss_type, list):
+            return torch.stack(
+                [
+                    self.compute_loss(survtime, event, logits, S, loss_type=l) * w
+                    for l, w in zip(self.loss_type, self.loss_weights)
+                ]
+            ).sum()
         else:
-            raise NotImplementedError
+            if loss_type is None:
+                loss_type = self.loss_type
+            if loss_type == "cox_loss":
+                return self._coxloss(logits=logits, survtimes=survtime, events=event)
+            elif loss_type == "cox_loss__ce":
+                assert (isinstance(logits, list) or isinstance(logits, tuple)) and len(
+                    logits
+                ) == 2
+                return self._coxloss(
+                    logits=logits[0], survtimes=survtime, events=event
+                ) + self._ce(logits[1], event.float())
+            elif loss_type in [
+                "nll_loss",
+                "nll_logistic_hazard_loss",
+                "nll_pmf_loss",
+                "nll_pc_hazard_loss",
+            ]:
+                return self._nll_loss(logits=logits, S=S, Y=survtime, c=1 - event)
+            elif loss_type in ["deephit_loss", "deephit_single_loss"]:
+                return self._deephistloss(
+                    survtimes=survtime, events=event, logits=logits
+                )
+            elif loss_type in ["bce", "binary_cross_entropy"]:
+                return self._bce(logits, event.float())
+            elif loss_type in ["ce", "cross_entropy"]:
+                return self._ce(logits, event)
+            else:
+                raise NotImplementedError
 
     def forward(self, batch, is_predict=False):
         raise NotImplementedError
