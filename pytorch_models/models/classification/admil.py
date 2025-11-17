@@ -111,43 +111,46 @@ class AttentionDeepMIL_PL(BaseMILModel):
         features, target = batch["features"], batch["labels"]
 
         # Prediction
-        logits, preds, _ = self._forward(features)
-        logits = logits.squeeze(dim=1)
-        target = target.squeeze(dim=1)
+        logits, Y_hat, A = self._forward(features)
 
         loss = None
         if not is_predict:
-            loss = self.loss.forward(logits.float(), target.float())
+            loss = self.loss.forward(
+                logits, target.float() if logits.shape[1] == 1 else target.view(-1)
+            )
+        
+        # Sigmoid or Softmax activation
+        if self.n_classes == 1:
+            preds = logits.sigmoid()
+        else:
+            preds = torch.nn.functional.softmax(logits, dim=1)
 
         return {
             "target": target,
             "preds": preds,
             "loss": loss,
+            "attention": A,
             "slide_name": batch["slide_name"],
         }
 
-    def _forward(self, features):
-        h: List[torch.Tensor] = [features[key] for key in features]
-        h: torch.Tensor = aggregate_features(h, method=self.multires_aggregation)
-        if len(h.shape) == 3:
-            h = h.squeeze(dim=0)
-        return self.model.forward(h)
-
-
-if __name__ == "__main__":
-    # create test data and model
-    n_features = 384
-    n_classes = 1
-    n_samples = 100
-
-    features = torch.rand(n_samples, n_features)
-
-    model = GatedAttention(L=n_features, D=128, K=1, n_classes=n_classes)
-
-    # test forward
-    logits, preds, A = model.forward(features)
-    print(
-        logits.shape,
-        preds.shape,
-        A.shape,
-    )
+    def _forward(self, features_batch):
+        logits = []
+        Y_hat = []
+        A = []
+        for idx, singlePatientFeatures in enumerate(features_batch):
+            h = [
+                singlePatientFeatures[f].squeeze() for f in singlePatientFeatures.keys()
+            ]
+            if self.multires_aggregation in ["linear", "linear_2"]:
+                h = self.linear_agg(h)
+            else:
+                h: torch.Tensor = aggregate_features(
+                    h, method=self.multires_aggregation
+                )
+            if len(h.shape) == 3:
+                h = h.squeeze(dim=0)
+            _logits, _Y_hat, _A = self.model.forward(h)
+            logits.append(_logits)
+            Y_hat.append(_Y_hat)
+            A.append(_A)
+        return torch.vstack(logits), torch.vstack(Y_hat), A
