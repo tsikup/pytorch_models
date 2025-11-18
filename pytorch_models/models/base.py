@@ -585,7 +585,7 @@ class BaseMILModel(BaseModel):
 
     def predict_step(self, batch, batch_idx):
         output = self.forward(batch, is_predict=True)
-        return output["preds"], batch["labels"], batch["slide_name"]
+        return output["preds"], batch["labels"], batch["slide_name"], output["logits"]
 
 
 class BaseClinicalMultimodalMILModel(BaseMILModel):
