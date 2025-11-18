@@ -838,6 +838,7 @@ class CLAM_PL(BaseMILModel):
             "loss": loss,
             "attention": A,
             "slide_name": batch["slide_name"],
+            "logits": logits
         }
 
     def _forward(

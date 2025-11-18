@@ -172,7 +172,7 @@ class BaseModel(L.LightningModule):
             preds = logits.sigmoid()
         else:
             preds = torch.nn.functional.softmax(logits, dim=1)
-        return {"images": images, "target": target, "preds": preds, "loss": loss}
+        return {"images": images, "target": target, "preds": preds, "loss": loss, "logits": logits}
 
     def configure_optimizers(self):
         optimizer = self._get_optimizer()
@@ -529,6 +529,7 @@ class BaseMILModel(BaseModel):
             "preds": preds,
             "loss": loss,
             "slide_name": batch["slide_name"],
+            "logits": logits
         }
 
     def _forward(self, features_batch):
@@ -1040,6 +1041,7 @@ class BaseMILSurvModel(BaseSurvModel):
             "cif": cif,
             "loss": loss,
             "slide_name": batch["slide_name"],
+            "logits": logits
         }
 
     def _forward(self, features_batch):
