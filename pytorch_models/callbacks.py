@@ -54,6 +54,11 @@ def get_callbacks(config):
         callbacks.append(StochasticWeightAveraging(swa_lrs=1e-2))
     if config.comet.enable:
         callbacks.append(CometMLCustomLogs())
+    try:
+        if config.energy_monitoring:
+            callbacks.append(EnergyMonitorCallback())
+    except AttributeError:
+        pass
     callbacks.append(BetterProgressBar())
     return callbacks
 
