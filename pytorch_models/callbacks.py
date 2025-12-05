@@ -187,7 +187,7 @@ class EnergyMonitorCallback(Callback):
         self.zeus_monitor.begin_window("train_batch")
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
-        self.zeus_monitor.end_window("train_batch")
+        mes = self.zeus_monitor.end_window("train_batch")
         self.time['train']['batch'].append(mes.time)
         self.energy['train']['batch'].append(mes.total_energy)
 
