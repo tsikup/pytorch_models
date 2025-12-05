@@ -2,6 +2,7 @@ import re
 from datetime import timedelta
 from typing import Union, List
 
+from torch.cuda import current_device
 from lightning.pytorch.callbacks import (
     Callback,
     DeviceStatsMonitor,
@@ -138,7 +139,7 @@ class BetterProgressBar(RichProgressBar):
 class EnergyMonitorCallback(Callback):
     def __init__(self, gpu_indices: List[int] = None) -> None:
         super().__init__()
-        self.gpu_indices = gpu_indices if gpu_indices is not None else [torch.cuda.current_device()]
+        self.gpu_indices = gpu_indices if gpu_indices is not None else [current_device()]
         self.zeus_monitor = ZeusMonitor(gpu_indices=self.gpu_indices)
 
     def _compute_metrics(self):
