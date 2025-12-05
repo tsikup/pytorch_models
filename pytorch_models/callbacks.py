@@ -1,6 +1,6 @@
 import re
 from datetime import timedelta
-from typing import Union
+from typing import Union, List
 
 from lightning.pytorch.callbacks import (
     Callback,
