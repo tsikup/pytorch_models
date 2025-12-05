@@ -16,6 +16,8 @@ from rich.progress import ProgressColumn
 from rich.style import Style
 from rich.text import Text
 
+from zeus.monitor import ZeusMonitor
+
 
 def get_callbacks(config):
     """
@@ -127,3 +129,94 @@ class BetterProgressBar(RichProgressBar):
         columns = super().configure_columns(trainer)
         columns.insert(4, RemainingTimeColumn(style=self.theme.time))
         return columns
+
+class EnergyMonitorCallback(Callback):
+    def __init__(self, gpu_indices: List[int] = None) -> None:
+        super().__init__()
+        self.gpu_indices = gpu_indices if gpu_indices is not None else [torch.cuda.current_device()]
+        self.zeus_monitor = ZeusMonitor(gpu_indices=self.gpu_indices)
+
+    def _compute_metrics(self):
+        def _mean(values):
+            return sum(values) / len(values) if values else 0
+        for mode in ['train', 'val']:
+            self.metrics[f'avg_{mode}_time_epoch'] = _mean(self.time[mode]['epoch'])
+            self.metrics[f'avg_{mode}_energy_epoch'] = _mean(self.energy[mode]['epoch'])
+            self.metrics[f'avg_{mode}_time_batch'] = _mean(self.time[mode]['batch'])
+            self.metrics[f'avg_{mode}_energy_batch'] = _mean(self.energy[mode]['batch'])
+        self.metrics['entire_fit_time'] = self.time['entire_fit']
+        self.metrics['entire_fit_energy'] = self.energy['entire_fit']
+        self.metrics['predict_time'] = self.time['predict']
+        self.metrics['predict_energy'] = self.energy['predict']
+        self.metrics['test_time'] = self.time['test']
+        self.metrics['test_energy'] = self.energy['test']
+
+    def on_fit_start(self, trainer, pl_module):
+        self.time = dict()
+        self.energy = dict()
+        self.metrics = dict()
+        self.zeus_monitor.begin_window("entire_fit")
+        for mode in ["train", "val"]:
+            self.time[mode] = dict(epoch=[], batch=[])
+            self.energy[mode] = dict(epoch=[], batch=[])
+        for mode in ["test", "predict", "entire_fit"]:
+            self.time[mode] = None
+            self.energy[mode] = None
+
+    def on_fit_end(self, trainer, pl_module):
+        mes = self.zeus_monitor.end_window("entire_fit")
+        self.time['entire_fit'] = mes.time
+        self.energy['entire_fit'] = mes.total_energy
+        self._compute_metrics()
+
+    def on_train_epoch_start(self, trainer, pl_module):
+        self.zeus_monitor.begin_window("train_epoch")
+
+    def on_train_epoch_end(self, trainer, pl_module):
+        mes = self.zeus_monitor.end_window("train_epoch")
+        self.time['train']['epoch'].append(mes.time)
+        self.energy['train']['epoch'].append(mes.total_energy)
+
+    def on_train_batch_start(self, trainer, pl_module):
+        self.zeus_monitor.begin_window("train_batch")
+
+    def on_train_batch_end(self, trainer, pl_module):
+        self.zeus_monitor.end_window("train_batch")
+        self.time['train']['batch'].append(mes.time)
+        self.energy['train']['batch'].append(mes.total_energy)
+
+    def on_validation_epoch_start(self, trainer, pl_module):
+        self.zeus_monitor.begin_window("val_epoch")
+
+    def on_validation_epoch_end(self, trainer, pl_module):
+        mes = self.zeus_monitor.end_window("val_epoch")
+        self.time['val']['epoch'].append(mes.time)
+        self.energy['val']['epoch'].append(mes.total_energy)
+
+    def on_validation_batch_start(self, trainer, pl_module):
+        self.zeus_monitor.begin_window("val_batch")
+
+    def on_validation_batch_end(self, trainer, pl_module):
+        mes = self.zeus_monitor.end_window("val_batch")
+        self.time['val']['batch'].append(mes.time)
+        self.energy['val']['batch'].append(mes.total_energy)
+
+    def on_test_start(self, trainer, pl_module):
+        self.zeus_monitor.begin_window("test")
+
+    def on_test_end(self, trainer, pl_module):
+        mes = self.zeus_monitor.end_window("test")
+        self.time['test'] = mes.time
+        self.energy['test'] = mes.total_energy
+
+    def on_predict_start(self, trainer, pl_module):
+        self.zeus_monitor.begin_window("predict")
+
+    def on_predict_end(self, trainer, pl_module):
+        mes = self.zeus_monitor.end_window("predict")
+        self.time['predict'] = mes.time
+        self.energy['predict'] = mes.total_energy
+
+
+
+
