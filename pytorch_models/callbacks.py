@@ -157,7 +157,7 @@ class EnergyMonitorCallback(Callback):
         self.metrics['test_time'] = self.time['test']
         self.metrics['test_energy'] = self.energy['test']
 
-    def on_fit_start(self, trainer, pl_module):
+    def on_fit_start(self, **kwargs):
         self.time = dict()
         self.energy = dict()
         self.metrics = dict()
@@ -169,56 +169,56 @@ class EnergyMonitorCallback(Callback):
             self.time[mode] = None
             self.energy[mode] = None
 
-    def on_fit_end(self, trainer, pl_module):
+    def on_fit_end(self, **kwargs):
         mes = self.zeus_monitor.end_window("entire_fit")
         self.time['entire_fit'] = mes.time
         self.energy['entire_fit'] = mes.total_energy
         self._compute_metrics()
 
-    def on_train_epoch_start(self, trainer, pl_module):
+    def on_train_epoch_start(self, **kwargs):
         self.zeus_monitor.begin_window("train_epoch")
 
-    def on_train_epoch_end(self, trainer, pl_module):
+    def on_train_epoch_end(self, **kwargs):
         mes = self.zeus_monitor.end_window("train_epoch")
         self.time['train']['epoch'].append(mes.time)
         self.energy['train']['epoch'].append(mes.total_energy)
 
-    def on_train_batch_start(self, trainer, pl_module):
+    def on_train_batch_start(self, **kwargs):
         self.zeus_monitor.begin_window("train_batch")
 
-    def on_train_batch_end(self, trainer, pl_module):
+    def on_train_batch_end(self, **kwargs):
         self.zeus_monitor.end_window("train_batch")
         self.time['train']['batch'].append(mes.time)
         self.energy['train']['batch'].append(mes.total_energy)
 
-    def on_validation_epoch_start(self, trainer, pl_module):
+    def on_validation_epoch_start(self, **kwargs):
         self.zeus_monitor.begin_window("val_epoch")
 
-    def on_validation_epoch_end(self, trainer, pl_module):
+    def on_validation_epoch_end(self, **kwargs):
         mes = self.zeus_monitor.end_window("val_epoch")
         self.time['val']['epoch'].append(mes.time)
         self.energy['val']['epoch'].append(mes.total_energy)
 
-    def on_validation_batch_start(self, trainer, pl_module):
+    def on_validation_batch_start(self, **kwargs):
         self.zeus_monitor.begin_window("val_batch")
 
-    def on_validation_batch_end(self, trainer, pl_module):
+    def on_validation_batch_end(self, **kwargs):
         mes = self.zeus_monitor.end_window("val_batch")
         self.time['val']['batch'].append(mes.time)
         self.energy['val']['batch'].append(mes.total_energy)
 
-    def on_test_start(self, trainer, pl_module):
+    def on_test_start(self, **kwargs):
         self.zeus_monitor.begin_window("test")
 
-    def on_test_end(self, trainer, pl_module):
+    def on_test_end(self, **kwargs):
         mes = self.zeus_monitor.end_window("test")
         self.time['test'] = mes.time
         self.energy['test'] = mes.total_energy
 
-    def on_predict_start(self, trainer, pl_module):
+    def on_predict_start(self, **kwargs):
         self.zeus_monitor.begin_window("predict")
 
-    def on_predict_end(self, trainer, pl_module):
+    def on_predict_end(self, **kwargs):
         mes = self.zeus_monitor.end_window("predict")
         self.time['predict'] = mes.time
         self.energy['predict'] = mes.total_energy
