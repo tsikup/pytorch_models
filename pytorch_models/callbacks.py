@@ -141,6 +141,21 @@ class EnergyMonitorCallback(Callback):
         super().__init__()
         self.gpu_indices = gpu_indices if gpu_indices is not None else [current_device()]
         self.zeus_monitor = ZeusMonitor(gpu_indices=self.gpu_indices)
+        self.time = dict()
+        self.energy = dict()
+        self.metrics = dict()
+        for mode in ["train", "val"]:
+            self.time[mode] = dict(epoch=[], batch=[])
+            self.energy[mode] = dict(epoch=[], batch=[])
+        for mode in ["test", "predict", "entire_fit"]:
+            self.time[mode] = None
+            self.energy[mode] = None
+
+    # method to get self.metrics
+    @property
+    def metrics(self):
+        self._compute_metrics()
+        return self._metrics
 
     def _compute_metrics(self):
         def _mean(values):
@@ -158,22 +173,12 @@ class EnergyMonitorCallback(Callback):
         self.metrics['test_energy'] = self.energy['test']
 
     def on_fit_start(self, trainer, pl_module):
-        self.time = dict()
-        self.energy = dict()
-        self.metrics = dict()
         self.zeus_monitor.begin_window("entire_fit")
-        for mode in ["train", "val"]:
-            self.time[mode] = dict(epoch=[], batch=[])
-            self.energy[mode] = dict(epoch=[], batch=[])
-        for mode in ["test", "predict", "entire_fit"]:
-            self.time[mode] = None
-            self.energy[mode] = None
 
     def on_fit_end(self, trainer, pl_module):
         mes = self.zeus_monitor.end_window("entire_fit")
         self.time['entire_fit'] = mes.time
         self.energy['entire_fit'] = mes.total_energy
-        self._compute_metrics()
 
     def on_train_epoch_start(self, trainer, pl_module):
         self.zeus_monitor.begin_window("train_epoch")
