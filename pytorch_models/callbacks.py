@@ -143,15 +143,14 @@ class EnergyMonitorCallback(Callback):
         self.zeus_monitor = ZeusMonitor(gpu_indices=self.gpu_indices)
         self.time = dict()
         self.energy = dict()
-        self.metrics = dict()
+        self._metrics = dict()
         for mode in ["train", "val"]:
             self.time[mode] = dict(epoch=[], batch=[])
             self.energy[mode] = dict(epoch=[], batch=[])
         for mode in ["test", "predict", "entire_fit"]:
-            self.time[mode] = None
-            self.energy[mode] = None
+            self.time[mode] = []
+            self.energy[mode] = []
 
-    # method to get self.metrics
     @property
     def metrics(self):
         self._compute_metrics()
@@ -159,26 +158,26 @@ class EnergyMonitorCallback(Callback):
 
     def _compute_metrics(self):
         def _mean(values):
-            return sum(values) / len(values) if values else 0
+            return sum(values) / len(values) if values else None
         for mode in ['train', 'val']:
-            self.metrics[f'avg_{mode}_time_epoch'] = _mean(self.time[mode]['epoch'])
-            self.metrics[f'avg_{mode}_energy_epoch'] = _mean(self.energy[mode]['epoch'])
-            self.metrics[f'avg_{mode}_time_batch'] = _mean(self.time[mode]['batch'])
-            self.metrics[f'avg_{mode}_energy_batch'] = _mean(self.energy[mode]['batch'])
-        self.metrics['entire_fit_time'] = self.time['entire_fit']
-        self.metrics['entire_fit_energy'] = self.energy['entire_fit']
-        self.metrics['predict_time'] = self.time['predict']
-        self.metrics['predict_energy'] = self.energy['predict']
-        self.metrics['test_time'] = self.time['test']
-        self.metrics['test_energy'] = self.energy['test']
+            self._metrics[f'avg_{mode}_time_epoch'] = _mean(self.time[mode]['epoch'])
+            self._metrics[f'avg_{mode}_energy_epoch'] = _mean(self.energy[mode]['epoch'])
+            self._metrics[f'avg_{mode}_time_batch'] = _mean(self.time[mode]['batch'])
+            self._metrics[f'avg_{mode}_energy_batch'] = _mean(self.energy[mode]['batch'])
+        self._metrics['entire_fit_time'] = _mean(self.time['entire_fit'])
+        self._metrics['entire_fit_energy'] = _mean(self.energy['entire_fit'])
+        self._metrics['predict_time'] = _mean(self.time['predict'])
+        self._metrics['predict_energy'] = _mean(self.energy['predict'])
+        self._metrics['test_time'] = _mean(self.time['test'])
+        self._metrics['test_energy'] = _mean(self.energy['test'])
 
     def on_fit_start(self, trainer, pl_module):
         self.zeus_monitor.begin_window("entire_fit")
 
     def on_fit_end(self, trainer, pl_module):
         mes = self.zeus_monitor.end_window("entire_fit")
-        self.time['entire_fit'] = mes.time
-        self.energy['entire_fit'] = mes.total_energy
+        self.time['entire_fit'].append(mes.time)
+        self.energy['entire_fit'].append(mes.total_energy)
 
     def on_train_epoch_start(self, trainer, pl_module):
         self.zeus_monitor.begin_window("train_epoch")
@@ -217,16 +216,16 @@ class EnergyMonitorCallback(Callback):
 
     def on_test_end(self, trainer, pl_module):
         mes = self.zeus_monitor.end_window("test")
-        self.time['test'] = mes.time
-        self.energy['test'] = mes.total_energy
+        self.time['test'].append(mes.time)
+        self.energy['test'].append(mes.total_energy)
 
     def on_predict_start(self, trainer, pl_module):
         self.zeus_monitor.begin_window("predict")
 
     def on_predict_end(self, trainer, pl_module):
         mes = self.zeus_monitor.end_window("predict")
-        self.time['predict'] = mes.time
-        self.energy['predict'] = mes.total_energy
+        self.time['predict'].append(mes.time)
+        self.energy['predict'].append(mes.total_energy)
 
 
 
